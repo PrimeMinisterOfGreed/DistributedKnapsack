@@ -1,0 +1,8 @@
+CompileFlags:
+  CompilationDatabase: build
+  Add:
+  Remove:
+    - -fmodules-ts
+    - -fmodule*
+    - -Wmodule*
+    - -fdeps*

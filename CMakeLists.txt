@@ -1,9 +1,11 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.31)
 project(DistributedKnapsack)
+
+add_subdirectory(libs/tasker)
 
 find_package(OpenMP REQUIRED)
 find_package(MPI REQUIRED)
-find_package(Boost REQUIRED COMPONENTS mpi program_options)
+find_package(Boost REQUIRED COMPONENTS mpi program_options container)
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

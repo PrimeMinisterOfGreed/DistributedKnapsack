@@ -11,9 +11,11 @@
 
 ProgramOptions options{};
 
-void single_node_routine()
+ProgramOptions get_opts()
 {
+	return options;
 }
+
 
 void mpi_routine(int argc, char **argv)
 {
@@ -40,8 +42,10 @@ int main(int argc, char *argv[])
 	namespace po = boost::program_options;
 	po::options_description desc("Allowed options");
 	desc.add_options()("gpu", po::bool_switch(&options.use_gpu)->default_value(false),
-					   "use_gpu")("threads", po::value<int>(&options.num_threads)->default_value(1), "number of threads to use")(
-		"chunk-size", po::value<int>(&options.chunk_size)->default_value(1000), "size of chunks to digest for each thread")(
+					   "use_gpu")(
+		"chunk-size", po::value<int>(&options.chunk_size)->default_value(1000), "size of chunks to digest for each thread")
+		("multithread", po::bool_switch(&options.use_mpi)->default_value(false), "use multithreading")
+		("weights-file", po::value<std::string>(&options.weights_file)->default_value("weights.dat"), "file containing weights")(
 		"verbosity", po::value<int>(&options.verbosity)->default_value(1), "verbosity of the log file")(
 		"restore", po::bool_switch(&options.restore_from_file)->default_value(false), "restore a previous save file")(
 		"save_file", po::value<std::string>(&options.savefile)->default_value("store.dat"), "store file for data")(
