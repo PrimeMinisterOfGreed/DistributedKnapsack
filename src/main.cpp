@@ -72,7 +72,6 @@ int main(int argc, char *argv[])
 	}
 	if (options.use_mpi)
 		mpi_routine(argc, argv);
-	else
-		single_node_routine();
+
 	return 0;
 }

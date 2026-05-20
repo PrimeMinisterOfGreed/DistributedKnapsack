@@ -8,7 +8,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <gtest/gtest.h>
-#include <md5.hpp>
 
 class TestPromise : public TestEnvironment {};
 

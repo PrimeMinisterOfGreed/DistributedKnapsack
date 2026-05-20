@@ -11,4 +11,7 @@ struct KnapsackSolution
 
 KnapsackSolution knapsackdp(const std::vector<int>& weights, const std::vector<int>& values, int capacity, int numThreads = 1);
 
-KnapsackSolution knapsackdpmpi(boost::mpi::communicator& comm, const std::vector<int>& weights, const std::vector<int>& values, int capacity);
+
+
+
+std::optional<KnapsackSolution> knapsackdpmpi(boost::mpi::communicator& comm, const std::vector<int>& weights, const std::vector<int>& values, int capacity);
