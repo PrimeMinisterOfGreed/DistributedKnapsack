@@ -21,4 +21,5 @@ TEST(KnapsackDP, MultipleThreadsFindOptimalValue)
 	auto result = knapsackdp(weights, values, capacity, 4);
 	fmt::println("Included items: {}", fmt::join(result.items, ", "));
 	EXPECT_EQ(result.totalValue, 26);
+	
 }
