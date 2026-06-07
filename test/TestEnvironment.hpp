@@ -1,10 +1,18 @@
 
 #include "Async/executor.hpp"
+#include "options_bag.hpp"
 #include <gtest/gtest.h>
 
-class TestEnvironment : public testing::Test {
-public:
-  virtual void SetUp() {}
+class TestEnvironment : public testing::Test
+{
+  public:
+	virtual void SetUp()
+	{
+	}
 
-  virtual void TearDown() { Scheduler::main().reset(); }
+	virtual void TearDown()
+	{
+		Scheduler::main().reset();
+	}
 };
+

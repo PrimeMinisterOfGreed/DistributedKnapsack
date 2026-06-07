@@ -38,7 +38,7 @@ enum NODETAG
 	TERMINATE = 3
 };
 
-KnapsackSolution mainnode(boost::mpi::communicator &comm, const std::vector<int> &weights,
+static KnapsackSolution mainnode(boost::mpi::communicator &comm, const std::vector<int> &weights,
 						  const std::vector<int> &values, int capacity)
 {
 	int n = weights.size();
@@ -90,7 +90,7 @@ KnapsackSolution mainnode(boost::mpi::communicator &comm, const std::vector<int>
 	return solution;
 }
 
-void workernode(boost::mpi::communicator &comm, const std::vector<int> &weights, const std::vector<int> &values,
+static void workernode(boost::mpi::communicator &comm, const std::vector<int> &weights, const std::vector<int> &values,
 				int capacity)
 {
 	int n = weights.size();
