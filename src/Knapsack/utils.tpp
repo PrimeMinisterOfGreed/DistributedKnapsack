@@ -6,29 +6,11 @@
 #include <thread>
 #include <vector>
 
-template <typename It> struct overwrite_iterator
-{
-	It it;
-
-	overwrite_iterator &operator=(const auto &value)
-	{
-		*it = value;
-		return *this;
-	}
-
-	overwrite_iterator &operator*()
-	{
-		return *this;
-	}
-	overwrite_iterator &operator++()
-	{
-		++it;
-		return *this;
-	}
-};
-
 template <std::ranges::input_range Range>
-	requires(std::totally_ordered<typename Range::value_type>)
+	requires(requires(typename Range::value_type v) {
+		{ v > v } -> std::convertible_to<bool>;
+		{ v >= v } -> std::convertible_to<bool>;
+	})
 std::pair<int, int> co_rank(const Range &A, const Range &B, int i)
 {
 	const int m = static_cast<int>(A.size());
@@ -41,14 +23,14 @@ std::pair<int, int> co_rank(const Range &A, const Range &B, int i)
 	bool active = true;
 	while (active)
 	{
-		if (j > 0 && (k < n && A[j-1]>B[k]))
+		if (j > 0 && (k < n && A[j - 1] > B[k]))
 		{
 			auto step = (j - j_low + 1) / 2;
 			k_low = k;
 			j -= step;
 			k += step;
 		}
-		else if (k > 0 && (j < m && B[k-1]>=A[j]))
+		else if (k > 0 && (j < m && B[k - 1] >= A[j]))
 		{
 			auto step = (k - k_low + 1) / 2;
 			j_low = j;
@@ -60,8 +42,6 @@ std::pair<int, int> co_rank(const Range &A, const Range &B, int i)
 			active = false;
 			continue;
 		}
-
-		return {j, k};
 	}
 
 	return {j, k};
@@ -72,21 +52,20 @@ void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num
 {
 	using namespace std::ranges;
 	int total_size = A.size() + B.size();
+	#pragma parallel for num_threads(num_threads)
 	for (int t = 0; t < num_threads; ++t)
 	{
 
-		int start = t * total_size / num_threads;
-		int end = (t + 1) * total_size / num_threads;
-
+		int start = std::floor(t * total_size / num_threads);
+		int end = std::floor((t + 1) * total_size / num_threads);
 		auto [a_start, b_start] = co_rank(A, B, start);
 		auto [a_end, b_end] = co_rank(A, B, end);
-		std::printf("Thread %d: A[%d:%d], B[%d:%d]\n", t, a_start, a_end, b_start, b_end);
-		std::merge(A.begin() + a_start, A.begin() + a_end, B.begin() + b_start, B.begin() + b_end,
-				   std::inserter(output, std::next(output.begin(), start)));
+		std::merge(begin(A) + a_start, begin(A) + a_end, begin(B) + b_start, begin(B) + b_end,
+				   std::inserter(output, begin(output) + start));
 	}
 }
 
-template <std::ranges::input_range Range> std::vector<CopaSubset> generate_copa_subsets(Range &&r)
+template <std::ranges::input_range Range> std::vector<CopaSubset> generate_copa_subsets(Range &&r, int numthreads = 1)
 {
 	std::vector<CopaSubset> subsets{CopaSubset{}};
 	for (const auto &item : r)
@@ -104,10 +83,9 @@ template <std::ranges::input_range Range> std::vector<CopaSubset> generate_copa_
 		std::vector<CopaSubset> newSubsets;
 		newSubsets.reserve(subsets.size() + shifted.size());
 
-		std::ranges::merge(subsets, shifted, std::back_inserter(newSubsets),
-						   [](const CopaSubset &a, const CopaSubset &b) { return a.totalWeight < b.totalWeight; });
-
+		parallel_merge(subsets, shifted, newSubsets, numthreads);
 		subsets = std::move(newSubsets);
+		
 	}
 	return subsets;
 }

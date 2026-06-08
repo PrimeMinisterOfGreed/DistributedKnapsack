@@ -3,11 +3,8 @@ CompileFlags:
   Add:
     - -fopenmp
     - -std=c++23
-    - -frelaxed-template-template-args
   Remove:
     - -fmodules-ts
     - -fmodule*
     - -Wmodule*
     - -fdeps*
-  Completion:
-    AllScopes: true

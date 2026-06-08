@@ -11,6 +11,21 @@ struct CopaSubset
 	std::vector<int> items;
 	int totalWeight{};
 	int totalValue{};
+
+	bool operator>(const CopaSubset &other) const
+	{
+		return totalWeight > other.totalWeight;
+	}
+
+	bool operator>=(const CopaSubset &other) const
+	{
+		return totalWeight >= other.totalWeight;
+	}
+
+	bool operator<(const CopaSubset &other) const
+	{
+		return totalWeight < other.totalWeight;
+	}
 };
 
 

@@ -10,11 +10,7 @@
 std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, const std::vector<int> &values,
 											 int capacity, int numThreads)
 {
-	(void)weights;
-	(void)values;
-	(void)capacity;
-	(void)numThreads;
-	return std::nullopt;
+	
 }
 
 // Region MPI version

@@ -26,10 +26,11 @@ TEST(ParallelMerge, MergesAdjacentSortedRangesCorrectlyMultiThread)
 
     std::vector<int> data;
     data.reserve(a.size() + b.size() + 1);
-    parallel_merge(a, b, data, 4);
+    parallel_merge(a, b, data, 2);
 
 
 
     std::vector<int> expected{0,1,2,3,5,6,7,11,12};
     EXPECT_EQ(data, expected);
 }
+

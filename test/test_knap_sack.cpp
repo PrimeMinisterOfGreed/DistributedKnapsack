@@ -29,7 +29,7 @@ TEST(KnapsackDP, MultipleThreadsFindOptimalValue)
 TEST(GenerateCopaSubsets, ProducesAllSubsetsSortedByWeight)
 {
 	std::vector<std::pair<int, int>> items{{1, 1}, {2, 2}};
-	auto subsets = generate_copa_subsets(items);
+	auto subsets = generate_copa_subsets(items,3);
 
 	EXPECT_EQ(subsets.size(), 4u);
 
