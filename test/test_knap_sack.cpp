@@ -54,4 +54,90 @@ TEST(GenerateCopaSubsets, ProducesAllSubsetsSortedByWeight)
 	EXPECT_EQ(subsets[3].items, expected_items[3]);
 }
 
+TEST(Prune, SingleThreadKeepsValidBlockPairs)
+{
+	std::vector<CopaSubset> A{
+		CopaSubset{{}, 1, 10},
+		CopaSubset{{}, 3, 30},
+		CopaSubset{{}, 5, 50},
+		CopaSubset{{}, 7, 70}
+	};
+
+	std::vector<CopaSubset> B{
+		CopaSubset{{}, 8, 80},
+		CopaSubset{{}, 6, 60},
+		CopaSubset{{}, 4, 40},
+		CopaSubset{{}, 2, 20}
+	};
+
+	std::vector<std::pair<std::span<const CopaSubset>, std::span<const CopaSubset>>> result;
+	prune(A, B, result, 10, 1);
+
+	EXPECT_EQ(result.size(), 1u);
+	EXPECT_EQ(result[0].first.size(), 4u);
+	EXPECT_EQ(result[0].second.size(), 4u);
+}
+
+TEST(Prune, MultiThreadPrunesAndKeepsCorrectly)
+{
+	std::vector<CopaSubset> A{
+		CopaSubset{{}, 1, 10},
+		CopaSubset{{}, 2, 20},
+		CopaSubset{{}, 3, 30},
+		CopaSubset{{}, 4, 40}
+	};
+
+	std::vector<CopaSubset> B{
+		CopaSubset{{}, 5, 50},
+		CopaSubset{{}, 4, 40},
+		CopaSubset{{}, 3, 30},
+		CopaSubset{{}, 2, 20}
+	};
+
+	std::vector<std::pair<std::span<const CopaSubset>, std::span<const CopaSubset>>> result;
+	prune(A, B, result, 6, 2);
+
+	EXPECT_EQ(result.size(), 2u);
+}
+
+TEST(ParallelSaveMaxValue, SingleThreadComputesSuffixMax)
+{
+	std::vector<CopaSubset> input{
+		CopaSubset{{1}, 1, 10},
+		CopaSubset{{2}, 2, 5},
+		CopaSubset{{3}, 3, 20},
+		CopaSubset{{4}, 4, 15}
+	};
+	std::vector<CopaSubset> output;
+	parallel_save_max_value(input, output, 1);
+
+	ASSERT_EQ(output.size(), 4u);
+	EXPECT_EQ(output[0].totalValue, 20);
+	EXPECT_EQ(output[1].totalValue, 20);
+	EXPECT_EQ(output[2].totalValue, 20);
+	EXPECT_EQ(output[3].totalValue, 15);
+}
+
+TEST(ParallelSaveMaxValue, MultiThreadComputesSuffixMax)
+{
+	std::vector<CopaSubset> input{
+		CopaSubset{{1}, 1, 10},
+		CopaSubset{{2}, 2, 5},
+		CopaSubset{{3}, 3, 20},
+		CopaSubset{{4}, 4, 15},
+		CopaSubset{{5}, 5, 25},
+		CopaSubset{{6}, 6, 8}
+	};
+	std::vector<CopaSubset> output;
+	parallel_save_max_value(input, output, 3);
+
+	ASSERT_EQ(output.size(), 6u);
+	EXPECT_EQ(output[0].totalValue, 25);
+	EXPECT_EQ(output[1].totalValue, 25);
+	EXPECT_EQ(output[2].totalValue, 25);
+	EXPECT_EQ(output[3].totalValue, 25);
+	EXPECT_EQ(output[4].totalValue, 25);
+	EXPECT_EQ(output[5].totalValue, 8);
+}
+
 

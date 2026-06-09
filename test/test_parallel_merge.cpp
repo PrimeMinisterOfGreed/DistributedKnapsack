@@ -34,3 +34,87 @@ TEST(ParallelMerge, MergesAdjacentSortedRangesCorrectlyMultiThread)
     EXPECT_EQ(data, expected);
 }
 
+TEST(DivideInBalancedBlocks, SingleThreadDividesCorrectly)
+{
+    std::vector<CopaSubset> input{
+        CopaSubset{{1}, 1, 10},
+        CopaSubset{{2}, 2, 5},
+        CopaSubset{{3}, 3, 20},
+        CopaSubset{{4}, 4, 15}
+    };
+
+    std::vector<std::pair<std::span<const CopaSubset>, int>> blocks(1);
+    divide_in_balanced_blocks(input, blocks, 1);
+
+    ASSERT_EQ(blocks.size(), 1u);
+    EXPECT_EQ(blocks[0].first.size(), 4u);
+    EXPECT_EQ(blocks[0].second, 20);
+}
+
+TEST(DivideInBalancedBlocks, MultiThreadDividesCorrectly)
+{
+    std::vector<CopaSubset> input{
+        CopaSubset{{1}, 1, 10},
+        CopaSubset{{2}, 2, 5},
+        CopaSubset{{3}, 3, 20},
+        CopaSubset{{4}, 4, 15}
+    };
+
+    std::vector<std::pair<std::span<const CopaSubset>, int>> blocks(2);
+    divide_in_balanced_blocks(input, blocks, 2);
+
+    ASSERT_EQ(blocks.size(), 2u);
+    EXPECT_EQ(blocks[0].first.size(), 2u);
+    EXPECT_EQ(blocks[1].first.size(), 2u);
+    EXPECT_EQ(blocks[0].second, 10);
+    EXPECT_EQ(blocks[1].second, 20);
+}
+
+TEST(DivideInBalancedBlocks, EmptyInputDoesNotModifyOutput)
+{
+    std::vector<CopaSubset> input;
+    std::vector<std::pair<std::span<const CopaSubset>, int>> blocks(2);
+    blocks[0] = {std::span<const CopaSubset>{}, 42};
+    blocks[1] = {std::span<const CopaSubset>{}, 99};
+    divide_in_balanced_blocks(input, blocks, 2);
+    EXPECT_EQ(blocks[0].second, 42);
+    EXPECT_EQ(blocks[1].second, 99);
+}
+
+TEST(DivideInBalancedBlocks, UnevenDivisionHandlesRemainder)
+{
+    std::vector<CopaSubset> input{
+        CopaSubset{{1}, 1, 10},
+        CopaSubset{{2}, 2, 20},
+        CopaSubset{{3}, 3, 30},
+        CopaSubset{{4}, 4, 40},
+        CopaSubset{{5}, 5, 50}
+    };
+
+    std::vector<std::pair<std::span<const CopaSubset>, int>> blocks(2);
+    divide_in_balanced_blocks(input, blocks, 2);
+
+    ASSERT_EQ(blocks.size(), 2u);
+    EXPECT_EQ(blocks[0].first.size(), 3u);
+    EXPECT_EQ(blocks[1].first.size(), 2u);
+    EXPECT_EQ(blocks[0].second, 30);
+    EXPECT_EQ(blocks[1].second, 50);
+}
+
+TEST(DivideInBalancedBlocks, BlocksReferenceOriginalData)
+{
+    std::vector<CopaSubset> input{
+        CopaSubset{{1}, 1, 10},
+        CopaSubset{{2}, 2, 20},
+        CopaSubset{{3}, 3, 30}
+    };
+
+    std::vector<std::pair<std::span<const CopaSubset>, int>> blocks(3);
+    divide_in_balanced_blocks(input, blocks, 3);
+
+    ASSERT_EQ(blocks.size(), 3u);
+    EXPECT_EQ(&blocks[0].first.front(), &input[0]);
+    EXPECT_EQ(&blocks[1].first.front(), &input[1]);
+    EXPECT_EQ(&blocks[2].first.front(), &input[2]);
+}
+
