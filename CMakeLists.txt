@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.31)
-project(DistributedKnapsack)
+cmake_minimum_required(VERSION 3.26)
+project(DistributedKnapsack C CXX)
 
 add_subdirectory(libs/tasker)
 
@@ -21,6 +21,6 @@ add_executable(distributed_knapsack ${KP_SRC} )
 target_include_directories(distributed_knapsack PUBLIC src include ${OpenMP_CXX_INCLUDE_DIRS} ${OpenMP_C_INCLUDE_DIRS} ${MPI_CXX_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} ${fmt_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR})
 
 # Link OpenMP libraries
-target_link_libraries(distributed_knapsack PUBLIC OpenMP::OpenMP_CXX OpenMP::OpenMP_C  MPI::MPI_CXX Boost::mpi Boost::program_options fmt Eigen3::Eigen )
+target_link_libraries(distributed_knapsack PUBLIC OpenMP::OpenMP_CXX OpenMP::OpenMP_C  MPI::MPI_CXX Boost::mpi Boost::program_options fmt::fmt Eigen3::Eigen )
 
 add_subdirectory(test)

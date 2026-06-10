@@ -2,6 +2,7 @@
 #include "Knapsack/knapsackcopa.hpp"
 #include "TestEnvironment.hpp"
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <vector>
 #include "Knapsack/utils.tpp"
 

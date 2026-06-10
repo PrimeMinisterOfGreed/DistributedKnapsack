@@ -26,7 +26,8 @@
                 "CMAKE_C_COMPILER": "/usr/bin/gcc-15",
                 "CMAKE_CXX_COMPILER": "/usr/bin/g++-15",
                 "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_TOOLCHAIN_FILE":"${sourceDir}/build/conan_toolchain.cmake"
             }
         }
     ]
