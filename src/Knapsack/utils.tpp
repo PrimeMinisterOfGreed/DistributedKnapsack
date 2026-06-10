@@ -7,12 +7,54 @@
 #include <thread>
 #include <vector>
 
-template <std::ranges::input_range Range>
-	requires(requires(typename Range::value_type v) {
-		{ v > v } -> std::convertible_to<bool>;
-		{ v >= v } -> std::convertible_to<bool>;
-	})
-std::pair<int, int> co_rank(const Range &A, const Range &B, int i)
+#pragma region Concepts
+
+struct CopaBlock
+{
+	std::span<const CopaSubset> block;
+	int maxValue;
+};
+template <typename T>
+concept CopaItem = requires(T v) {
+	{ v.totalWeight } -> std::convertible_to<int>;
+	{ v.totalValue } -> std::convertible_to<int>;
+};
+
+template <typename Range>
+concept CopaRange = std::ranges::input_range<Range> && CopaItem<typename Range::value_type>;
+
+template <typename Range>
+concept CopaOutputRange = std::ranges::output_range<Range, const typename Range::value_type>;
+
+template <typename Range>
+concept CopaBlockOutputRange = std::ranges::output_range<Range, CopaBlock>;
+
+template<typename CorankComparable>
+concept CoRankComparable = requires(CorankComparable a, CorankComparable b) {
+	{ a > b } -> std::convertible_to<bool>;
+	{ a >= b } -> std::convertible_to<bool>;
+};
+
+template<typename CorankOrderableRange>
+concept CoRankOrderableRange = std::ranges::input_range<CorankOrderableRange> && CoRankComparable<typename CorankOrderableRange::value_type>;
+
+#pragma endregion
+
+
+#pragma region Generation
+
+/**
+ * @brief Computes the co-rank partition index for two sorted ranges.
+ *
+ * Determines the split point where the first @p i merged elements come from
+ * the two input ranges while preserving sorted order.
+ *
+ * @tparam Range
+ * @param v
+ * @return
+ */
+
+std::pair<int, int> co_rank(const CoRankOrderableRange auto &A, const CoRankOrderableRange auto  &B, int i)
 {
 	const int m = static_cast<int>(A.size());
 	const int n = static_cast<int>(B.size());
@@ -48,137 +90,17 @@ std::pair<int, int> co_rank(const Range &A, const Range &B, int i)
 	return {j, k};
 }
 
-template <std::ranges::input_range Range,
-		  std::ranges::output_range<std::pair<std::span<const typename Range::value_type>, int>> OutputRange>
-	requires(requires(typename Range::value_type v) {
-		{ v.totalValue } -> std::convertible_to<int>;
-	})
-void divide_in_balanced_blocks(const Range &input, OutputRange& output, int num_threads)
-
-{
-	using ValueType = typename Range::value_type;
-	int n = static_cast<int>(std::ranges::size(input));
-	int k = std::max(1, num_threads);
-	k = std::min(k, n);
-
-	if (n == 0)
-		return ;
-
-	int block_size = n / k;
-	int remainder = n % k;
-	auto data = std::ranges::data(input);
-
-
-#pragma omp parallel for num_threads(num_threads)
-	for (int i = 0; i < k; ++i)
-	{
-		int start = i * block_size + std::min(i, remainder);
-		int end = start + block_size + (i < remainder ? 1 : 0);
-		if (start >= end)
-		{
-			output[i] = {std::span<const ValueType>{}, 0};
-			continue;
-		}
-
-		auto span = std::span(data + start, static_cast<std::size_t>(end - start));
-		int max_val = 0;
-		for (const auto &elem : span)
-		{
-			if (elem.totalValue > max_val)
-				max_val = elem.totalValue;
-		}
-		output[i] = {span, max_val};
-	}
-
-	return;
-}
-
-template <std::ranges::contiguous_range RangeA, std::ranges::contiguous_range RangeB,
-		  std::ranges::output_range<
-			  std::pair<std::span<const typename RangeA::value_type>, std::span<const typename RangeB::value_type>>>
-			  OutputRange>
-	requires(requires(typename RangeA::value_type a, typename RangeB::value_type b) {
-		{ a.totalWeight } -> std::convertible_to<int>;
-		{ a.totalValue } -> std::convertible_to<int>;
-		{ b.totalWeight } -> std::convertible_to<int>;
-		{ b.totalValue } -> std::convertible_to<int>;
-	})
-void prune(const RangeA &A, const RangeB &B, OutputRange &output, int capacity, int threads = 1)
-{
-	int k = std::max(1, threads);
-	k = std::min(k, static_cast<int>(std::ranges::size(A)));
-	k = std::min(k, static_cast<int>(std::ranges::size(B)));
-
-	if (k <= 0 || capacity < 0)
-	{
-		return;
-	}
-
-	std::vector<std::pair<std::span<const typename RangeA::value_type>, int>> blocksA(k);
-	std::vector<std::pair<std::span<const typename RangeB::value_type>, int>> blocksB(k);
-
-	divide_in_balanced_blocks(A, blocksA, threads);
-	divide_in_balanced_blocks(B, blocksB, threads);
-
-	if (k <= 0 || capacity < 0)
-	{
-		return;
-	}
-
-	// Algorithm 4: Parallel pruning algorithm
-	// Each processor Pi (i from 0 to k-1) checks block pairs (Ai, B_{j mod k}) for j = i to k+i-1
-	std::vector<std::vector<
-		std::pair<std::span<const typename RangeA::value_type>, std::span<const typename RangeB::value_type>>>>
-		local_results(k);
-
-#pragma omp parallel for num_threads(threads)
-	for (int i = 0; i < k; ++i)
-	{
-		const auto &[Ai, maxA] = blocksA[i];
-		if (Ai.empty())
-			continue;
-
-		int maxvalue_i = 0;
-
-		for (int j = i; j < k + i; ++j)
-		{
-			int b_idx = j % k;
-			const auto &[Bj, maxB] = blocksB[b_idx];
-			if (Bj.empty())
-				continue;
-
-			int Z = Ai.front().totalWeight + Bj.back().totalWeight;
-			int Y = Ai.back().totalWeight + Bj.front().totalWeight;
-
-			if (Y <= capacity)
-			{
-				// All pairs in this block pair are valid; save max profit and prune
-				if (maxA + maxB > maxvalue_i)
-				{
-					maxvalue_i = maxA + maxB;
-				}
-				// Prune block pair (Ai, B_{j mod k})
-			}
-			else if (Z <= capacity && Y > capacity)
-			{
-				// Some pairs may be valid; keep this block pair for further search
-				local_results[i].emplace_back(Ai, Bj);
-			}
-			else if (Z > capacity)
-			{
-				// No pairs in this block pair are valid; prune
-			}
-		}
-	}
-
-	// Merge local results from all processors
-	for (const auto &local : local_results)
-	{
-		output.insert(output.end(), local.begin(), local.end());
-	}
-}
-
-template <std::ranges::input_range Range, std::ranges::output_range<const typename Range::value_type &> OutputRange>
+/**
+ * @brief Merges two sorted ranges in parallel using co-ranking to partition the work
+ *
+ * @tparam Range Input range type
+ * @tparam OutputRange Output range type
+ * @param A First sorted range in ascending order
+ * @param B Second sorted range in ascending order
+ * @param output Merged output range
+ * @param num_threads Number of threads for parallel execution
+ */
+template <std::ranges::input_range Range, std::ranges::output_range<const typename Range::value_type> OutputRange>
 void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num_threads)
 {
 	using namespace std::ranges;
@@ -186,18 +108,6 @@ void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num
 
 	if (num_threads <= 1 || total_size == 0)
 	{
-		std::merge(begin(A), end(A), begin(B), end(B), std::back_inserter(output));
-		return;
-	}
-
-	// Pre-size output for safe random-access parallel writes
-	if constexpr (requires(OutputRange &out, std::size_t sz) { out.resize(sz); })
-	{
-		output.resize(static_cast<std::size_t>(total_size));
-	}
-	else
-	{
-		// Fallback to sequential merge if output cannot be resized
 		std::merge(begin(A), end(A), begin(B), end(B), std::back_inserter(output));
 		return;
 	}
@@ -213,6 +123,19 @@ void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num
 	}
 }
 
+/**
+ * @brief Generate CopaSubset combinations from an input range of (weight, value) items.
+ *
+ * This function constructs all subsets (like a powerset) of the provided items,
+ * producing a vector of CopaSubset where each entry contains the items selected
+ * along with their totalWeight and totalValue. Merging of intermediate subset
+ * lists can be done in parallel via the numthreads parameter.
+ *
+ * @tparam Range The input range type yielding pairs (weight, value).
+ * @param r Input range of items (weight, value).
+ * @param numthreads Number of threads to use for parallel merging (default 1).
+ * @return std::vector<CopaSubset> Vector of all generated subsets.
+ */
 template <std::ranges::input_range Range> std::vector<CopaSubset> generate_copa_subsets(Range &&r, int numthreads = 1)
 {
 	std::vector<CopaSubset> subsets{CopaSubset{}};
@@ -229,7 +152,7 @@ template <std::ranges::input_range Range> std::vector<CopaSubset> generate_copa_
 		}
 
 		std::vector<CopaSubset> newSubsets;
-		newSubsets.reserve(subsets.size() + shifted.size());
+		newSubsets.resize(subsets.size() + shifted.size());
 
 		parallel_merge(subsets, shifted, newSubsets, numthreads);
 		subsets = std::move(newSubsets);
@@ -237,7 +160,129 @@ template <std::ranges::input_range Range> std::vector<CopaSubset> generate_copa_
 	return subsets;
 }
 
-template <std::ranges::input_range Range, std::ranges::output_range<const typename Range::value_type &> OutputRange>
+#pragma endregion
+
+#pragma region Optimizers
+
+
+
+void distribute_block_per_processor(const CopaRange auto &input, CopaBlockOutputRange auto &output, int num_threads)
+{
+	int n = static_cast<int>(std::ranges::size(input));
+	int k = std::max(1, num_threads);
+	k = std::min(k, n);
+
+	if (n == 0)
+		return;
+
+	int block_size = n / k;
+	int remainder = n % k;
+
+#pragma omp parallel for num_threads(num_threads)
+	for (int i = 0; i < k; ++i)
+	{
+		int start = i * block_size + std::min(i, remainder);
+		int end = start + block_size + (i < remainder ? 1 : 0);
+		if (start >= end)
+		{
+			output[i] = {std::span<const CopaSubset>{}, 0};
+			continue;
+		}
+
+		auto span = std::ranges::subrange(std::ranges::begin(input) + start, std::ranges::begin(input) + end);
+		int max_val = 0;
+		for (const auto &elem : span)
+		{
+			if (elem.totalValue > max_val)
+				max_val = elem.totalValue;
+		}
+		output[i] = {span, max_val};
+	}
+
+	return;
+}
+
+
+
+void prune(const std::ranges::input_range auto &A, const std::ranges::input_range auto &B,
+		   CopaBlockOutputRange auto &Aout, CopaBlockOutputRange auto &Bout, int capacity, int threads = 1)
+{
+	int k = std::max(1, threads);
+	k = std::min(k, static_cast<int>(std::ranges::size(A)));
+	k = std::min(k, static_cast<int>(std::ranges::size(B)));
+
+	if (k <= 0 || capacity < 0)
+	{
+		return;
+	}
+
+	std::vector<CopaBlock> blocksA(k);
+	std::vector<CopaBlock> blocksB(k);
+
+	distribute_block_per_processor(A, blocksA, threads);
+	distribute_block_per_processor(B, blocksB, threads);
+
+	if (k <= 0 || capacity < 0)
+	{
+		return;
+	}
+
+	// Algorithm 4: Parallel pruning algorithm
+	// Each processor Pi (i from 0 to k-1) checks block pairs (Ai, B_{j mod k}) for j = i to k+i-1
+	std::vector<std::vector<std::pair<CopaBlock, CopaBlock>>> local_results(k);
+
+#pragma omp parallel for num_threads(threads)
+	for (int i = 0; i < k; ++i)
+	{
+		const auto &blockA = blocksA[i];
+		if (blockA.block.empty())
+			continue;
+
+		int maxvalue_i = 0;
+
+		for (int j = i; j < k + i; ++j)
+		{
+			int b_idx = j % k;
+			const auto &blockB = blocksB[b_idx];
+			if (blockB.block.empty())
+				continue;
+
+			int Z = blockA.block.front().totalWeight + blockB.block.back().totalWeight;
+			int Y = blockA.block.back().totalWeight + blockB.block.front().totalWeight;
+
+			if (Y <= capacity)
+			{
+				// All pairs in this block pair are valid; save max profit and prune
+				if (blockA.maxValue + blockB.maxValue > maxvalue_i)
+				{
+					maxvalue_i = blockA.maxValue + blockB.maxValue;
+				}
+				// Prune block pair (Ai, B_{j mod k})
+			}
+			else if (Z <= capacity && Y > capacity)
+			{
+				// Some pairs may be valid; keep this block pair for further search
+				local_results[i].emplace_back(blockA, blockB);
+			}
+			else if (Z > capacity)
+			{
+				// No pairs in this block pair are valid; prune
+			}
+		}
+	}
+
+	// Merge local results from all processors
+	for (const auto &local : local_results)
+	{
+		for (const auto &[blockA, blockB] : local)
+		{
+			Aout.push_back(blockA);
+			Bout.push_back(blockB);
+		}
+	}
+}
+
+template <std::ranges::input_range Range, std::ranges::output_range<const typename Range::value_type> OutputRange>
 void parallel_save_max_value(Range &input, OutputRange &output, int num_threads)
 {
 	using ValueType = typename Range::value_type;
@@ -341,3 +386,5 @@ void parallel_save_max_value(Range &input, OutputRange &output, int num_threads)
 
 	std::ranges::copy(result, std::back_inserter(output));
 }
+
+#pragma endregion

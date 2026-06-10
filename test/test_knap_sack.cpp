@@ -71,12 +71,14 @@ TEST(Prune, SingleThreadKeepsValidBlockPairs)
 		CopaSubset{{}, 2, 20}
 	};
 
-	std::vector<std::pair<std::span<const CopaSubset>, std::span<const CopaSubset>>> result;
-	prune(A, B, result, 10, 1);
+	std::vector<CopaBlock> Aout;
+	std::vector<CopaBlock> Bout;
+	prune(A, B, Aout, Bout, 10, 1);
 
-	EXPECT_EQ(result.size(), 1u);
-	EXPECT_EQ(result[0].first.size(), 4u);
-	EXPECT_EQ(result[0].second.size(), 4u);
+	ASSERT_EQ(Aout.size(), Bout.size());
+	EXPECT_EQ(Aout.size(), 1u);
+	EXPECT_EQ(Aout[0].block.size(), 4u);
+	EXPECT_EQ(Bout[0].block.size(), 4u);
 }
 
 TEST(Prune, MultiThreadPrunesAndKeepsCorrectly)
@@ -95,10 +97,12 @@ TEST(Prune, MultiThreadPrunesAndKeepsCorrectly)
 		CopaSubset{{}, 2, 20}
 	};
 
-	std::vector<std::pair<std::span<const CopaSubset>, std::span<const CopaSubset>>> result;
-	prune(A, B, result, 6, 2);
+	std::vector<CopaBlock> Aout;
+	std::vector<CopaBlock> Bout;
+	prune(A, B, Aout, Bout, 6, 2);
 
-	EXPECT_EQ(result.size(), 2u);
+	ASSERT_EQ(Aout.size(), Bout.size());
+	EXPECT_EQ(Aout.size(), 2u);
 }
 
 TEST(ParallelSaveMaxValue, SingleThreadComputesSuffixMax)
@@ -139,6 +143,69 @@ TEST(ParallelSaveMaxValue, MultiThreadComputesSuffixMax)
 	EXPECT_EQ(output[3].totalValue, 25);
 	EXPECT_EQ(output[4].totalValue, 25);
 	EXPECT_EQ(output[5].totalValue, 8);
+}
+
+TEST(KnapsackCopaSequential, OneThreadFindsOptimalValue)
+{
+	const std::vector<int> weights{1, 2, 3, 4};
+	const std::vector<int> values{1, 6, 10, 16};
+	constexpr int capacity = 7;
+	auto result = knapsackcopasequential(weights, values, capacity);
+	ASSERT_TRUE(result.has_value());
+	fmt::println("Included items: {}", fmt::join(result->items, ", "));
+	EXPECT_EQ(result->totalValue, 26);
+}
+
+TEST(KnapsackCopaSequential, SmallCapacityFindsOptimalValue)
+{
+	const std::vector<int> weights{2, 3, 4, 5};
+	const std::vector<int> values{3, 4, 5, 6};
+	constexpr int capacity = 5;
+	auto result = knapsackcopasequential(weights, values, capacity);
+	ASSERT_TRUE(result.has_value());
+	EXPECT_EQ(result->totalValue, 7);
+}
+
+TEST(KnapsackCopaSequential, EmptyItemsReturnsZero)
+{
+	const std::vector<int> weights{};
+	const std::vector<int> values{};
+	constexpr int capacity = 10;
+	auto result = knapsackcopasequential(weights, values, capacity);
+	ASSERT_TRUE(result.has_value());
+	EXPECT_EQ(result->totalValue, 0);
+	EXPECT_EQ(result->items.empty(), true);
+}
+
+TEST(KnapsackCopaSequential, OddNumberOfItemsReturnsNullopt)
+{
+	const std::vector<int> weights{1, 2, 3};
+	const std::vector<int> values{1, 6, 10};
+	constexpr int capacity = 7;
+	auto result = knapsackcopasequential(weights, values, capacity);
+	EXPECT_FALSE(result.has_value());
+}
+
+TEST(KnapsackCopaSequential, AllItemsFit)
+{
+	const std::vector<int> weights{1, 2, 3, 4};
+	const std::vector<int> values{1, 6, 10, 16};
+	constexpr int capacity = 15;
+	auto result = knapsackcopasequential(weights, values, capacity);
+	ASSERT_TRUE(result.has_value());
+	EXPECT_EQ(result->totalValue, 33);
+	EXPECT_EQ(result->totalWeight, 10);
+}
+
+TEST(KnapsackCopaSequential, SingleItemFits)
+{
+	const std::vector<int> weights{1, 2, 3, 4};
+	const std::vector<int> values{1, 6, 10, 16};
+	constexpr int capacity = 1;
+	auto result = knapsackcopasequential(weights, values, capacity);
+	ASSERT_TRUE(result.has_value());
+	EXPECT_EQ(result->totalValue, 1);
+	EXPECT_EQ(result->totalWeight, 1);
 }
 
 
