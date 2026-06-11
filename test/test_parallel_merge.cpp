@@ -2,7 +2,6 @@
 #include "TestEnvironment.hpp"
 #include <gtest/gtest.h>
 #include <vector>
-#include "Knapsack/utils.hpp"
 #include <algorithm>
 
 TEST(ParallelMerge, MergesAdjacentSortedRangesCorrectlySingleThread)

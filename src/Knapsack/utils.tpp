@@ -1,45 +1,12 @@
 #pragma once
 #include "Knapsack/knapsackcopa.hpp"
+#include "concepts.tpp"
 #include <algorithm>
 #include <iterator>
 #include <ranges>
 #include <span>
 #include <thread>
 #include <vector>
-
-#pragma region Concepts
-
-struct CopaBlock
-{
-	std::span<const CopaSubset> block;
-	int maxValue;
-};
-template <typename T>
-concept CopaItem = requires(T v) {
-	{ v.totalWeight } -> std::convertible_to<int>;
-	{ v.totalValue } -> std::convertible_to<int>;
-};
-
-template <typename Range>
-concept CopaRange = std::ranges::input_range<Range> && CopaItem<typename Range::value_type>;
-
-template <typename Range>
-concept CopaOutputRange = std::ranges::output_range<Range, const typename Range::value_type>;
-
-template <typename Range>
-concept CopaBlockOutputRange = std::ranges::output_range<Range, CopaBlock>;
-
-template<typename CorankComparable>
-concept CoRankComparable = requires(CorankComparable a, CorankComparable b) {
-	{ a > b } -> std::convertible_to<bool>;
-	{ a >= b } -> std::convertible_to<bool>;
-};
-
-template<typename CorankOrderableRange>
-concept CoRankOrderableRange = std::ranges::input_range<CorankOrderableRange> && CoRankComparable<typename CorankOrderableRange::value_type>;
-
-#pragma endregion
-
 
 #pragma region Generation
 
@@ -54,7 +21,7 @@ concept CoRankOrderableRange = std::ranges::input_range<CorankOrderableRange> &&
  * @return
  */
 
-std::pair<int, int> co_rank(const CoRankOrderableRange auto &A, const CoRankOrderableRange auto  &B, int i)
+std::pair<int, int> co_rank(const CoRankOrderableRange auto &A, const CoRankOrderableRange auto &B, int i)
 {
 	const int m = static_cast<int>(A.size());
 	const int n = static_cast<int>(B.size());
@@ -123,6 +90,7 @@ void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num
 	}
 }
 
+
 /**
  * @brief Generate CopaSubset combinations from an input range of (weight, value) items.
  *
@@ -136,7 +104,7 @@ void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num
  * @param numthreads Number of threads to use for parallel merging (default 1).
  * @return std::vector<CopaSubset> Vector of all generated subsets.
  */
-template <std::ranges::input_range Range> std::vector<CopaSubset> generate_copa_subsets(Range &&r, int numthreads = 1)
+std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r, int numthreads = 1)
 {
 	std::vector<CopaSubset> subsets{CopaSubset{}};
 	for (const auto &item : r)
@@ -155,7 +123,7 @@ template <std::ranges::input_range Range> std::vector<CopaSubset> generate_copa_
 		newSubsets.resize(subsets.size() + shifted.size());
 
 		parallel_merge(subsets, shifted, newSubsets, numthreads);
-		subsets = std::move(newSubsets);
+		subsets = newSubsets;
 	}
 	return subsets;
 }
@@ -163,8 +131,6 @@ template <std::ranges::input_range Range> std::vector<CopaSubset> generate_copa_
 #pragma endregion
 
 #pragma region Optimizers
-
-
 
 void distribute_block_per_processor(const CopaRange auto &input, CopaBlockOutputRange auto &output, int num_threads)
 {
@@ -202,10 +168,8 @@ void distribute_block_per_processor(const CopaRange auto &input, CopaBlockOutput
 	return;
 }
 
-
-
-void prune(const std::ranges::input_range auto &A, const std::ranges::input_range auto &B,
-		   CopaBlockOutputRange auto &Aout, CopaBlockOutputRange auto &Bout, int capacity, int threads = 1)
+int prune(const CopaRange auto &A, const CopaRange auto &B, CopaBlockPairingOutRange auto &blocks, int capacity,
+		  int threads = 1)
 {
 	int k = std::max(1, threads);
 	k = std::min(k, static_cast<int>(std::ranges::size(A)));
@@ -213,7 +177,7 @@ void prune(const std::ranges::input_range auto &A, const std::ranges::input_rang
 
 	if (k <= 0 || capacity < 0)
 	{
-		return;
+		return 0;
 	}
 
 	std::vector<CopaBlock> blocksA(k);
@@ -224,21 +188,20 @@ void prune(const std::ranges::input_range auto &A, const std::ranges::input_rang
 
 	if (k <= 0 || capacity < 0)
 	{
-		return;
+		return 0;
 	}
 
 	// Algorithm 4: Parallel pruning algorithm
 	// Each processor Pi (i from 0 to k-1) checks block pairs (Ai, B_{j mod k}) for j = i to k+i-1
 	std::vector<std::vector<std::pair<CopaBlock, CopaBlock>>> local_results(k);
+	int best_value = 0;
 
-#pragma omp parallel for num_threads(threads)
+#pragma omp parallel for num_threads(threads) reduction(max : best_value)
 	for (int i = 0; i < k; ++i)
 	{
 		const auto &blockA = blocksA[i];
 		if (blockA.block.empty())
 			continue;
-
-		int maxvalue_i = 0;
 
 		for (int j = i; j < k + i; ++j)
 		{
@@ -253,9 +216,9 @@ void prune(const std::ranges::input_range auto &A, const std::ranges::input_rang
 			if (Y <= capacity)
 			{
 				// All pairs in this block pair are valid; save max profit and prune
-				if (blockA.maxValue + blockB.maxValue > maxvalue_i)
+				if (blockA.maxValue + blockB.maxValue > best_value)
 				{
-					maxvalue_i = blockA.maxValue + blockB.maxValue;
+					best_value = blockA.maxValue + blockB.maxValue;
 				}
 				// Prune block pair (Ai, B_{j mod k})
 			}
@@ -274,12 +237,10 @@ void prune(const std::ranges::input_range auto &A, const std::ranges::input_rang
 	// Merge local results from all processors
 	for (const auto &local : local_results)
 	{
-		for (const auto &[blockA, blockB] : local)
-		{
-			Aout.push_back(blockA);
-			Bout.push_back(blockB);
-		}
+		blocks.insert(blocks.end(), local.begin(), local.end());
 	}
+
+	return best_value;
 }
 
 template <std::ranges::input_range Range, std::ranges::output_range<const typename Range::value_type> OutputRange>
@@ -385,6 +346,45 @@ void parallel_save_max_value(Range &input, OutputRange &output, int num_threads)
 	}
 
 	std::ranges::copy(result, std::back_inserter(output));
+}
+
+/**
+ * @brief Compute suffix max values and their global B-indices for a B block.
+ *
+ * Implements Algorithm 5 from the COPA paper (second parallel saving max-value stage).
+ * For each position j in the block (0-indexed), computes the maximum totalValue
+ * from position j to the end, and records the global B-array index where that max
+ * is achieved.
+ *
+ * @param block The B block span (sorted in nonincreasing order of weight)
+ * @param globalStartIdx The starting index of this block in the full B array
+ * @param suffixMaxValues Output: suffix max totalValue at each position
+ * @param suffixMaxIndices Output: global B-index achieving that suffix max at each position
+ */
+inline void block_suffix_max_values(const CopaRange auto &block, int globalStartIdx,
+									std::ranges::output_range<int> auto &suffixMaxValues,
+									std::ranges::output_range<int> auto &suffixMaxIndices)
+{
+	int e = static_cast<int>(block.size());
+	if (e == 0)
+		return;
+
+	suffixMaxValues[e - 1] = block[e - 1].totalValue;
+	suffixMaxIndices[e - 1] = globalStartIdx + e - 1;
+
+	for (int j = e - 2; j >= 0; --j)
+	{
+		if (block[j].totalValue > suffixMaxValues[j + 1])
+		{
+			suffixMaxValues[j] = block[j].totalValue;
+			suffixMaxIndices[j] = globalStartIdx + j;
+		}
+		else
+		{
+			suffixMaxValues[j] = suffixMaxValues[j + 1];
+			suffixMaxIndices[j] = suffixMaxIndices[j + 1];
+		}
+	}
 }
 
 #pragma endregion

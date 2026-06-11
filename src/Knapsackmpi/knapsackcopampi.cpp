@@ -1,4 +1,6 @@
-#include "knapsackcopa.hpp"
+#include "Knapsack/knapsackcopa.hpp"
+#include "knapsackmpi.hpp"
+
 
 
 KnapsackSolution mainnode(boost::mpi::communicator &comm, const std::vector<int> &weights,

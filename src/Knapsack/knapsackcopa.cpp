@@ -73,14 +73,118 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 {
 	using namespace std::views;
 	auto list = zip(weights, values);
-	auto Alist = take(list, list.size() / 2);
-	auto Blist = drop(list, list.size() / 2);
-	auto A = generate_copa_subsets(Alist);
-	//TODO This is evaluated eagerly because we need to reverse it, explore if we can avoid that
-	auto B = generate_copa_subsets(Blist);
+
+	int n = static_cast<int>(weights.size());
+	if (n == 0)
+		return KnapsackSolution{};
+	if (n % 2 != 0)
+		return std::nullopt;
+
+	auto Alist = take(list, n / 2);
+	auto Blist = drop(list, n / 2);
+	auto A = generate_copa_subsets(Alist, numThreads);
+	auto B = generate_copa_subsets(Blist, numThreads);
 	std::reverse(B.begin(), B.end());
-	std::vector<CopaBlock> blocksA{};
-	std::vector<CopaBlock> blocksB{};
-	prune(A, B, blocksA, blocksB, capacity, numThreads);
+
+	int N = static_cast<int>(A.size());
+	if (N == 0 || static_cast<int>(B.size()) != N)
+		return std::nullopt;
+
+	// Stage 3: Parallel pruning
+	std::vector<std::pair<CopaBlock, CopaBlock>> remainingPairs;
+	int bestValue = prune(A, B, remainingPairs, capacity, numThreads);
+
+	int k = static_cast<int>(remainingPairs.size());
+	if (k == 0)
+	{
+		KnapsackSolution solution{};
+		solution.totalValue = bestValue;
+		if (bestValue > 0)
+		{
+			int bestA = 0, bestB = 0;
+			for (int i = 0; i < N; ++i)
+			{
+				if (A[i].totalValue > A[bestA].totalValue)
+					bestA = i;
+				if (B[i].totalValue > B[bestB].totalValue)
+					bestB = i;
+			}
+			solution.totalWeight = A[bestA].totalWeight + B[bestB].totalWeight;
+			solution.items.reserve(A[bestA].items.size() + B[bestB].items.size());
+			solution.items.insert(solution.items.end(), A[bestA].items.begin(), A[bestA].items.end());
+			solution.items.insert(solution.items.end(), B[bestB].items.begin(), B[bestB].items.end());
+		}
+		return solution;
+	}
+
+	// Stages 4+5: For each remaining block pair, compute suffix max and search
+	std::vector<int> localBestVal(k, 0);
+	std::vector<int> localBestAIdx(k, 0);
+	std::vector<int> localBestBIdx(k, 0);
+
+#pragma omp parallel for num_threads(numThreads)
+	for (int i = 0; i < k; ++i)
+	{
+		const auto &blockA = remainingPairs[i].first;
+		const auto &blockB = remainingPairs[i].second;
+
+		int eA = static_cast<int>(blockA.block.size());
+		int eB = static_cast<int>(blockB.block.size());
+
+		if (eA == 0 || eB == 0)
+			continue;
+
+		int aGlobalStart = static_cast<int>(blockA.block.data() - A.data());
+		int bGlobalStart = static_cast<int>(blockB.block.data() - B.data());
+
+		// Stage 4: Suffix max for this B block
+		std::vector<int> suffixMaxVal(eB);
+		std::vector<int> suffixMaxIdx(eB);
+		block_suffix_max_values(blockB.block, bGlobalStart, suffixMaxVal, suffixMaxIdx);
+
+		// Stage 5: Two-pointer search within this block pair
+		int x = 0, y = 0;
+		int bestVal = 0, bestA = 0, bestB = 0;
+		while (x < eA && y < eB)
+		{
+			if (blockA.block[x].totalWeight + blockB.block[y].totalWeight > capacity)
+			{
+				y++;
+				continue;
+			}
+			int candidate = blockA.block[x].totalValue + suffixMaxVal[y];
+			if (candidate > bestVal)
+			{
+				bestVal = candidate;
+				bestA = aGlobalStart + x;
+				bestB = suffixMaxIdx[y];
+			}
+			x++;
+		}
+		localBestVal[i] = bestVal;
+		localBestAIdx[i] = bestA;
+		localBestBIdx[i] = bestB;
+	}
+
+	// Reduce across all remaining pairs
+	int bestAIdx = 0, bestBIdx = 0;
+	for (int i = 0; i < k; ++i)
+	{
+		if (localBestVal[i] > bestValue)
+		{
+			bestValue = localBestVal[i];
+			bestAIdx = localBestAIdx[i];
+			bestBIdx = localBestBIdx[i];
+		}
+	}
+
+	// Reconstruct solution
+	KnapsackSolution solution{};
+	solution.totalValue = bestValue;
+	solution.totalWeight = A[bestAIdx].totalWeight + B[bestBIdx].totalWeight;
+	solution.items.reserve(A[bestAIdx].items.size() + B[bestBIdx].items.size());
+	solution.items.insert(solution.items.end(), A[bestAIdx].items.begin(), A[bestAIdx].items.end());
+	solution.items.insert(solution.items.end(), B[bestBIdx].items.begin(), B[bestBIdx].items.end());
+	return solution;
 }
 

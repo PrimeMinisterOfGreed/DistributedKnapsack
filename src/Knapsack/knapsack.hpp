@@ -1,7 +1,6 @@
 #pragma once
-#include <vector>
 #include <boost/mpi.hpp>
-
+#include <vector>
 struct KnapsackSolution
 {
 	std::vector<int> items; // Indices of items included in the knapsack
@@ -9,9 +8,11 @@ struct KnapsackSolution
 	int totalWeight;		// Total weight of the included items
 };
 
-KnapsackSolution knapsackdp(const std::vector<int>& weights, const std::vector<int>& values, int capacity, int numThreads = 1);
+KnapsackSolution knapsackdp(const std::vector<int> &weights, const std::vector<int> &values, int capacity,
+							int numThreads = 1);
+std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &weights, const std::vector<int> &values,
+													   int capacity);
 
+std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, const std::vector<int> &values,
+											 int capacity, int numThreads = 1);
 
-
-
-std::optional<KnapsackSolution> knapsackdpmpi(boost::mpi::communicator& comm, const std::vector<int>& weights, const std::vector<int>& values, int capacity);

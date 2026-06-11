@@ -1,9 +1,10 @@
-#include "knapsack.hpp"
+#include "knapsackmpi.hpp"
 #include "options_bag.hpp"
 #include <boost/serialization/access.hpp>
 #include <boost/serialization/vector.hpp>
 #include <deque>
 #include <vector>
+#include "utils.tpp"
 
 struct NodeTask
 {

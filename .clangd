@@ -2,7 +2,6 @@ CompileFlags:
   CompilationDatabase: build
   Add:
     - -fopenmp
-    - -std=c++23
   Remove:
     - -fmodules-ts
     - -fmodule*

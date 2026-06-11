@@ -14,5 +14,9 @@
             ".continue/**/*.yaml",
             "file:///home/matteo.ielacqua/.continue/config.yaml"
         ]
-    }
+    },
+    "clangd.arguments": [
+        "--header-insertion=never",
+        "--query-driver=g++-15",
+    ]
 }
