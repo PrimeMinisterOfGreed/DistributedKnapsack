@@ -112,11 +112,10 @@ std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r,
 		std::vector<CopaSubset> shifted = subsets;
 		auto [w, v] = item;
 
-		for (auto &subset : shifted)
+		#pragma omp parallel for num_threads(numthreads)
+		for(int i = 0; i < static_cast<int>(shifted.size()); i++)
 		{
-			subset.items.push_back(v);
-			subset.totalWeight += w;
-			subset.totalValue += v;
+			shifted[i].addItem(i, w, v);
 		}
 
 		std::vector<CopaSubset> newSubsets;

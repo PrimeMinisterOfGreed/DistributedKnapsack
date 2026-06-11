@@ -13,7 +13,6 @@ std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &w
 	auto A = generate_copa_subsets(Alist);
 	auto B = std::views::reverse(generate_copa_subsets(Blist));
 
-
 	auto N = A.size();
 	if (N == 0 || B.size() != N)
 		return std::nullopt;
@@ -59,12 +58,13 @@ std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &w
 	}
 
 	// Step 3: Build solution
+	auto best = A[X1.first] << B[X1.second];
 	KnapsackSolution solution{};
 	solution.totalValue = bestValue;
 	solution.totalWeight = A[X1.first].totalWeight + B[X1.second].totalWeight;
-	solution.items.reserve(A[X1.first].items.size() + B[X1.second].items.size());
-	solution.items.insert(solution.items.end(), A[X1.first].items.begin(), A[X1.first].items.end());
-	solution.items.insert(solution.items.end(), B[X1.second].items.begin(), B[X1.second].items.end());
+	auto items = best.getItemIndices();
+	solution.items.reserve(items.size());
+	solution.items.insert(solution.items.end(), items.begin(), items.end());
 	return solution;
 }
 
@@ -109,10 +109,13 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 				if (B[i].totalValue > B[bestB].totalValue)
 					bestB = i;
 			}
+
 			solution.totalWeight = A[bestA].totalWeight + B[bestB].totalWeight;
-			solution.items.reserve(A[bestA].items.size() + B[bestB].items.size());
-			solution.items.insert(solution.items.end(), A[bestA].items.begin(), A[bestA].items.end());
-			solution.items.insert(solution.items.end(), B[bestB].items.begin(), B[bestB].items.end());
+			auto Aitems = A[bestA].getItemIndices();
+			auto Bitems = B[bestB].getItemIndices();
+			solution.items.reserve(Aitems.size() + Bitems.size());
+			solution.items.insert(solution.items.end(), Aitems.begin(), Aitems.end());
+			solution.items.insert(solution.items.end(), Bitems.begin(), Bitems.end());
 		}
 		return solution;
 	}
@@ -182,9 +185,8 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	KnapsackSolution solution{};
 	solution.totalValue = bestValue;
 	solution.totalWeight = A[bestAIdx].totalWeight + B[bestBIdx].totalWeight;
-	solution.items.reserve(A[bestAIdx].items.size() + B[bestBIdx].items.size());
-	solution.items.insert(solution.items.end(), A[bestAIdx].items.begin(), A[bestAIdx].items.end());
-	solution.items.insert(solution.items.end(), B[bestBIdx].items.begin(), B[bestBIdx].items.end());
+	auto items = (A[bestAIdx] << B[bestBIdx]).getItemIndices();
+	solution.items.reserve(items.size());
+	solution.items.insert(solution.items.end(), items.begin(), items.end());
 	return solution;
 }
-

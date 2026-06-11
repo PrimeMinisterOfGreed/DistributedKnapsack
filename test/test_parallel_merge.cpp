@@ -36,10 +36,10 @@ TEST(ParallelMerge, MergesAdjacentSortedRangesCorrectlyMultiThread)
 TEST(DivideInBalancedBlocks, SingleThreadDividesCorrectly)
 {
     std::vector<CopaSubset> input{
-        CopaSubset{{1}, 1, 10},
-        CopaSubset{{2}, 2, 5},
-        CopaSubset{{3}, 3, 20},
-        CopaSubset{{4}, 4, 15}
+        CopaSubset{{}, 1, 10},
+        CopaSubset{{}, 2, 5},
+        CopaSubset{{}, 3, 20},
+        CopaSubset{{}, 4, 15}
     };
 
     std::vector<CopaBlock> blocks(1);
@@ -53,10 +53,10 @@ TEST(DivideInBalancedBlocks, SingleThreadDividesCorrectly)
 TEST(DivideInBalancedBlocks, MultiThreadDividesCorrectly)
 {
     std::vector<CopaSubset> input{
-        CopaSubset{{1}, 1, 10},
-        CopaSubset{{2}, 2, 5},
-        CopaSubset{{3}, 3, 20},
-        CopaSubset{{4}, 4, 15}
+        CopaSubset{{}, 1, 10},
+        CopaSubset{{}, 2, 5},
+        CopaSubset{{}, 3, 20},
+        CopaSubset{{}, 4, 15}
     };
 
     std::vector<CopaBlock> blocks(2);
@@ -83,11 +83,11 @@ TEST(DivideInBalancedBlocks, EmptyInputDoesNotModifyOutput)
 TEST(DivideInBalancedBlocks, UnevenDivisionHandlesRemainder)
 {
     std::vector<CopaSubset> input{
-        CopaSubset{{1}, 1, 10},
-        CopaSubset{{2}, 2, 20},
-        CopaSubset{{3}, 3, 30},
-        CopaSubset{{4}, 4, 40},
-        CopaSubset{{5}, 5, 50}
+        CopaSubset{{}, 1, 10},
+        CopaSubset{{}, 2, 20},
+        CopaSubset{{}, 3, 30},
+        CopaSubset{{}, 4, 40},
+        CopaSubset{{}, 5, 50}
     };
 
     std::vector<CopaBlock> blocks(2);
@@ -103,9 +103,9 @@ TEST(DivideInBalancedBlocks, UnevenDivisionHandlesRemainder)
 TEST(DivideInBalancedBlocks, BlocksReferenceOriginalData)
 {
     std::vector<CopaSubset> input{
-        CopaSubset{{1}, 1, 10},
-        CopaSubset{{2}, 2, 20},
-        CopaSubset{{3}, 3, 30}
+        CopaSubset{{}, 1, 10},
+        CopaSubset{{}, 2, 20},
+        CopaSubset{{}, 3, 30}
     };
 
     std::vector<CopaBlock> blocks(3);

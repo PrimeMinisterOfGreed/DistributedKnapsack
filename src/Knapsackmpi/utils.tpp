@@ -24,6 +24,7 @@ std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm, const std:
 		auto shifted = subsets;
 		auto [w, v] = item;
 		boost::mpi::broadcast(comm, shifted, 0);
+		
 	}
 	return subsets;
 }

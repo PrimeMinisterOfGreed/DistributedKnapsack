@@ -47,11 +47,11 @@ TEST(GenerateCopaSubsets, ProducesAllSubsetsSortedByWeight)
 	EXPECT_EQ(weights, expected_weights);
 	EXPECT_EQ(values, expected_values);
 
-	std::vector<std::vector<int>> expected_items{{}, {1}, {2}, {1, 2}};
-	EXPECT_EQ(subsets[0].items, expected_items[0]);
-	EXPECT_EQ(subsets[1].items, expected_items[1]);
-	EXPECT_EQ(subsets[2].items, expected_items[2]);
-	EXPECT_EQ(subsets[3].items, expected_items[3]);
+	std::vector<std::vector<int>> expected_items{{}, {0}, {0}, {0, 1}};
+	EXPECT_EQ(subsets[0].getItemIndices(), expected_items[0]);
+	EXPECT_EQ(subsets[1].getItemIndices(), expected_items[1]);
+	EXPECT_EQ(subsets[2].getItemIndices(), expected_items[2]);
+	EXPECT_EQ(subsets[3].getItemIndices(), expected_items[3]);
 }
 
 TEST(Prune, SingleThreadKeepsValidBlockPairs)
@@ -85,8 +85,8 @@ TEST(Prune, MultiThreadPrunesAndKeepsCorrectly)
 
 TEST(ParallelSaveMaxValue, SingleThreadComputesSuffixMax)
 {
-	std::vector<CopaSubset> input{CopaSubset{{1}, 1, 10}, CopaSubset{{2}, 2, 5}, CopaSubset{{3}, 3, 20},
-								  CopaSubset{{4}, 4, 15}};
+	std::vector<CopaSubset> input{CopaSubset{{}, 1, 10}, CopaSubset{{}, 2, 5}, CopaSubset{{}, 3, 20},
+								  CopaSubset{{}, 4, 15}};
 	std::vector<CopaSubset> output;
 	parallel_save_max_value(input, output, 1);
 
@@ -99,8 +99,8 @@ TEST(ParallelSaveMaxValue, SingleThreadComputesSuffixMax)
 
 TEST(ParallelSaveMaxValue, MultiThreadComputesSuffixMax)
 {
-	std::vector<CopaSubset> input{CopaSubset{{1}, 1, 10}, CopaSubset{{2}, 2, 5},  CopaSubset{{3}, 3, 20},
-								  CopaSubset{{4}, 4, 15}, CopaSubset{{5}, 5, 25}, CopaSubset{{6}, 6, 8}};
+	std::vector<CopaSubset> input{CopaSubset{{}, 1, 10}, CopaSubset{{}, 2, 5},	CopaSubset{{}, 3, 20},
+								  CopaSubset{{}, 4, 15}, CopaSubset{{}, 5, 25}, CopaSubset{{}, 6, 8}};
 	std::vector<CopaSubset> output;
 	parallel_save_max_value(input, output, 3);
 
