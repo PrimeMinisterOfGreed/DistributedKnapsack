@@ -47,7 +47,7 @@ TEST(GenerateCopaSubsets, ProducesAllSubsetsSortedByWeight)
 	EXPECT_EQ(weights, expected_weights);
 	EXPECT_EQ(values, expected_values);
 
-	std::vector<std::vector<int>> expected_items{{}, {0}, {0}, {0, 1}};
+	std::vector<std::vector<int>> expected_items{{}, {0}, {1}, {0, 1}};
 	EXPECT_EQ(subsets[0].getItemIndices(), expected_items[0]);
 	EXPECT_EQ(subsets[1].getItemIndices(), expected_items[1]);
 	EXPECT_EQ(subsets[2].getItemIndices(), expected_items[2]);

@@ -18,12 +18,15 @@ void mpi_parallel_merge(communicator &comm, const std::ranges::input_range auto 
 
 std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm, const std::ranges::input_range auto &items)
 {
+	using namespace boost::mpi;
 	std::vector<CopaSubset> subsets{CopaSubset{}};
-	for (const auto &item : items)
+	for (int item_idx = 0; const auto &item : items)
 	{
 		auto shifted = subsets;
 		auto [w, v] = item;
-		boost::mpi::broadcast(comm, shifted, 0);
+		
+		
+		
 		
 	}
 	return subsets;

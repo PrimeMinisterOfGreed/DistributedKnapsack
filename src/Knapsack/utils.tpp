@@ -107,7 +107,7 @@ void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num
 std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r, int numthreads = 1)
 {
 	std::vector<CopaSubset> subsets{CopaSubset{}};
-	for (const auto &item : r)
+	for (int item_idx = 0; auto &&item : r)
 	{
 		std::vector<CopaSubset> shifted = subsets;
 		auto [w, v] = item;
@@ -115,9 +115,9 @@ std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r,
 		#pragma omp parallel for num_threads(numthreads)
 		for(int i = 0; i < static_cast<int>(shifted.size()); i++)
 		{
-			shifted[i].addItem(i, w, v);
+			shifted[i].addItem(item_idx, w, v);
 		}
-
+		item_idx++;
 		std::vector<CopaSubset> newSubsets;
 		newSubsets.resize(subsets.size() + shifted.size());
 

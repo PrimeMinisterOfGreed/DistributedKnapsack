@@ -44,3 +44,24 @@ TEST(MPIInitializationTest, CheckMPIInitialized) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     std::cout << "MPI Rank: " << rank << ", Size: " << size << std::endl;
 }
+
+TEST(MPIInitializationTest, TestScatterGatherPrimitives) {
+    check_mpi();
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    // Each process will send its rank to the root process
+    int send_data = rank;
+    std::vector<int> recv_data(size);
+    
+    MPI_Gather(&send_data, 1, MPI_INT, recv_data.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        std::cout << "Received data from all processes: ";
+        for (int i = 0; i < size; ++i) {
+            std::cout << recv_data[i] << " ";
+        }
+        std::cout << std::endl;
+    }
+}
