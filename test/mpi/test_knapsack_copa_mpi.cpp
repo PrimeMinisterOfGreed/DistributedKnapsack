@@ -2,7 +2,6 @@
 #include <boost/mpi.hpp>
 #include "Knapsack/knapsackcopa.hpp"
 #include "Knapsackmpi/utils.tpp"
-
 TEST(CopaSubsetSerialization, BroadcastBetweenNodes)
 {
 	int rank;
@@ -273,4 +272,105 @@ TEST(MpiGenerateCopaSubsets, SingleItemProducesTwoSubsets)
 	EXPECT_EQ(result[1].totalValue, 11);
 	EXPECT_TRUE(result[0].getItemIndices().empty());
 	EXPECT_EQ(result[1].getItemIndices(), std::vector<int>{0});
+}
+
+struct BlockExpectation
+{
+	int size;
+	int max_value;
+};
+
+static void check_block(const CopaBlock &block, BlockExpectation expected, int rank)
+{
+	ASSERT_EQ(block.block.size(), static_cast<size_t>(expected.size))
+		<< "Block size mismatch on rank " << rank;
+	EXPECT_EQ(block.maxValue, expected.max_value)
+		<< "Max value mismatch on rank " << rank;
+}
+
+static BlockExpectation expected_block(int n, int k, int rank, const std::vector<int> &values)
+{
+	int block_size = n / k;
+	int rem = n % k;
+	int sz = block_size + (rank < rem ? 1 : 0);
+	int start = block_size * rank + std::min(rank, rem);
+
+	int mx = 0;
+	for (int i = start; i < start + sz && i < n; ++i)
+		if (values[i] > mx)
+			mx = values[i];
+	return {sz, mx};
+}
+
+TEST(MpiDistributeBlock, BasicDistribution)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2);
+
+	boost::mpi::communicator comm;
+
+	std::vector<CopaSubset> input;
+	if (rank == 0)
+	{
+		for (int i = 1; i <= 10; ++i)
+			input.push_back(CopaSubset{{}, i * 10, i * 10});
+	}
+	broadcast(comm, input, 0);
+
+	CopaBlock local_block{{}, 0};
+	mpi_distribute_block_per_process(comm, input, local_block);
+
+	std::vector<int> values;
+	for (auto &s : input)
+		values.push_back(s.totalValue);
+
+	auto exp = expected_block(static_cast<int>(input.size()), comm.size(), rank, values);
+	check_block(local_block, exp, rank);
+}
+
+TEST(MpiDistributeBlock, EmptyInput)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2);
+
+	boost::mpi::communicator comm;
+	std::vector<CopaSubset> input;
+	broadcast(comm, input, 0);
+
+	CopaBlock local_block{{}, 0};
+	mpi_distribute_block_per_process(comm, input, local_block);
+	SUCCEED();
+}
+
+TEST(MpiDistributeBlock, UnevenDistribution)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2);
+
+	boost::mpi::communicator comm;
+
+	int n = 7;
+	std::vector<CopaSubset> input;
+	if (rank == 0)
+	{
+		for (int i = 1; i <= n; ++i)
+			input.push_back(CopaSubset{{}, i, i * 10});
+	}
+	broadcast(comm, input, 0);
+
+	CopaBlock local_block{{}, 0};
+	mpi_distribute_block_per_process(comm, input, local_block);
+
+	std::vector<int> values;
+	for (auto &s : input)
+		values.push_back(s.totalValue);
+
+	auto exp = expected_block(static_cast<int>(input.size()), comm.size(), rank, values);
+	check_block(local_block, exp, rank);
 }

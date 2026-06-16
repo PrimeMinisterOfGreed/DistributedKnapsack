@@ -1,5 +1,4 @@
 #include "Knapsackmpi/utils.tpp"
-#include "Mpi/boost_mpi_extensions.hpp"
 #include "options_bag.hpp"
 #include <boost/mpi/collectives/gather.hpp>
 #include <boost/mpi/collectives/scatter.hpp>
@@ -7,7 +6,6 @@
 #include <boost/mpi/communicator.hpp>
 #include <gtest/gtest.h>
 #include <mpi.h>
-
 ProgramOptions options{};
 
 void fillOptionsMap()
@@ -75,5 +73,24 @@ TEST(MPIInitializationTest, TestScatterGatherPrimitives)
 			std::cout << val << " ";
 		}
 		std::cout << std::endl;
+	}
+}
+
+TEST(MPIFeaturesTest, TestMpiMasterWorkerScheme)
+{
+	check_mpi();
+	using namespace boost::mpi;
+	auto comm = boost::mpi::communicator();
+	if (comm.rank() == 0)
+	{
+		for(int i = 1 ; i < comm.size(); i++)
+		{
+			auto status = comm.recv(any_source, 2);
+			fmt::println("[mainnode] received message from rank {}, tag {}", status.source(), status.tag());
+		}
+	}
+	else
+	{
+		comm.send(0, 2);
 	}
 }

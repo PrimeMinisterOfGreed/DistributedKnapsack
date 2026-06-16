@@ -111,7 +111,8 @@ constexpr void mpi_parallel_merge(communicator &comm, const std::vector<CopaSubs
 	broadcast(comm, output, 0);
 }
 
-std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm, const std::ranges::input_range auto &items)
+constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
+															const std::ranges::input_range auto &items)
 {
 	using namespace boost::mpi;
 	std::vector<CopaSubset> subsets{CopaSubset{}};
@@ -175,6 +176,40 @@ std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm, const std:
 
 #pragma region Optimizers
 
+constexpr void mpi_distribute_block_per_process(communicator &comm, const CopaRange auto &input,
+												CopaBlock &output)
+{
+	using value_type = std::ranges::range_value_t<decltype(input)>;
+	int n = static_cast<int>(std::ranges::size(input));
+	int k = comm.size();
+	if (k > n)
+		k = n;
 
+	if (n == 0)
+		return;
+
+	int block_size = n / k;
+	int remainder = n % k;
+
+	std::vector<int> sizes(k);
+	std::vector<int> displacements(k);
+	for (int i = 0; i < k; ++i)
+	{
+		sizes[i] = block_size + (i < remainder ? 1 : 0);
+		displacements[i] = block_size * i + std::min(i, remainder);
+	}
+
+	int rank = comm.rank();
+	std::vector<value_type> local_data(sizes[rank]);
+	scatterv(comm, std::ranges::data(input), sizes, displacements, local_data.data(), sizes[rank], 0);
+
+	int max_val = 0;
+	for (const auto &elem : local_data)
+	{
+		if (elem.totalValue > max_val)
+			max_val = elem.totalValue;
+	}
+	output = {std::span<const CopaSubset>(local_data), max_val};
+}
 
 #pragma endregion

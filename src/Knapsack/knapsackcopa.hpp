@@ -3,7 +3,6 @@
 #include <boost/serialization/access.hpp>
 #include <boost/serialization/vector.hpp>
 
-// TODO optimize in order to use a vector of bools instead of a vector of ints for the items in the subset, to save memory and improve cache performance
 struct CopaSubset
 {
 	std::vector<bool> items;

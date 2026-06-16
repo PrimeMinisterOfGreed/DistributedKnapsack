@@ -18,7 +18,6 @@
     "clangd.arguments": [
         "--header-insertion=never",
         "--query-driver=g++-15",
-        "--enable-experimental-module-support"
     ],
-    "clangd.path": "/usr/bin/clangd-23"
+    "clangd.path": "clangd-23"
 }

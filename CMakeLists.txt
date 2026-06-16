@@ -15,9 +15,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Collect all source files from src directory
 file(GLOB_RECURSE KP_SRC "src/*.cpp")
-file(GLOB_RECURSE KP_MODULES "src/*.tpp" "src/*.cxx")
+# Collect module-like sources and expose them as CXX modules
+file(GLOB_RECURSE KP_MODULES "src/*.cxx")
 # Create executable
-add_executable(distributed_knapsack ${KP_SRC} ${KP_MODULES})
+add_executable(distributed_knapsack  ${KP_SRC})
+# Add module files as a CXX_MODULES file set (CMake 3.26+)
+target_sources(distributed_knapsack PRIVATE
+	FILE_SET CXX_MODULES
+	TYPE CXX_MODULES
+	FILES ${KP_MODULES}
+)
 # Include directories
 target_include_directories(distributed_knapsack PUBLIC src include ${OpenMP_CXX_INCLUDE_DIRS} ${OpenMP_C_INCLUDE_DIRS} ${MPI_CXX_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} ${fmt_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR})
 target_compile_options(distributed_knapsack PUBLIC ${OpenMP_CXX_FLAGS} ${OpenMP_C_FLAGS} ${MPI_CXX_COMPILE_OPTIONS} ${Boost_COMPILE_OPTIONS} -fmodules)
