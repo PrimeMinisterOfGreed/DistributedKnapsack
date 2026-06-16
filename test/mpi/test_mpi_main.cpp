@@ -4,12 +4,34 @@
 #include <boost/mpi/collectives/scatter.hpp>
 #include <boost/mpi/collectives/scatterv.hpp>
 #include <boost/mpi/communicator.hpp>
+#include <execinfo.h>
 #include <gtest/gtest.h>
 #include <mpi.h>
+#include <spdlog/spdlog.h>
+#include <unistd.h>
+
 ProgramOptions options{};
 
 void fillOptionsMap()
 {
+}
+
+void mpi_errhandler(MPI_Comm *comm, int *error_code, ...)
+{
+	int rank;
+	MPI_Comm_rank(*comm, &rank);
+	char error_string[MPI_MAX_ERROR_STRING];
+	int result_len;
+	MPI_Error_string(*error_code, error_string, &result_len);
+
+	spdlog::error("MPI error on rank {}: {} (error code {})", rank, error_string, *error_code);
+	spdlog::error("Backtrace:");
+
+	void *buffer[100];
+	int frames = backtrace(buffer, 100);
+	backtrace_symbols_fd(buffer, frames, STDERR_FILENO);
+
+	MPI_Abort(*comm, *error_code);
 }
 
 void check_mpi()
@@ -26,6 +48,12 @@ void check_mpi()
 int main(int argc, char **argv)
 {
 	MPI_Init(&argc, &argv);
+
+	spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%@] %v");
+	MPI_Errhandler errhandler;
+	MPI_Comm_create_errhandler(reinterpret_cast<MPI_Comm_errhandler_function *>(mpi_errhandler), &errhandler);
+	MPI_Comm_set_errhandler(MPI_COMM_WORLD, errhandler);
+
 	testing::InitGoogleTest(&argc, argv);
 	auto res = RUN_ALL_TESTS();
 	MPI_Finalize();
@@ -83,10 +111,10 @@ TEST(MPIFeaturesTest, TestMpiMasterWorkerScheme)
 	auto comm = boost::mpi::communicator();
 	if (comm.rank() == 0)
 	{
-		for(int i = 1 ; i < comm.size(); i++)
+		for (int i = 1; i < comm.size(); i++)
 		{
 			auto status = comm.recv(any_source, 2);
-			fmt::println("[mainnode] received message from rank {}, tag {}", status.source(), status.tag());
+			spdlog::info("[mainnode] received message from rank {}, tag {}", status.source(), status.tag());
 		}
 	}
 	else

@@ -4,7 +4,7 @@
 #include <boost/serialization/access.hpp>
 #include <boost/serialization/vector.hpp>
 #include <deque>
-#include <fmt/core.h>
+#include <spdlog/spdlog.h>
 #include <vector>
 
 struct NodeTask
@@ -57,23 +57,25 @@ static KnapsackSolution mainnode(boost::mpi::communicator &comm, const std::vect
 	int num_workers = comm.size() - 1;
 	int chunk_size = get_opts().chunk_size;
 
-	fmt::println("[mainnode] starting: n={}, capacity={}, workers={}, chunk_size={}", n, capacity, num_workers,
+	SPDLOG_DEBUG("[mainnode] starting: n={}, capacity={}, workers={}, chunk_size={}", n, capacity, num_workers,
 				 chunk_size);
 
 	std::vector<std::vector<uint32_t>> dp(n + 1, std::vector<uint32_t>(capacity + 1, 0));
 
 	for (int i = 1; i <= n; ++i)
 	{
-		fmt::println("[mainnode] item {}: broadcasting dp[{}] (size {})", i, i - 1, capacity + 1);
-		broadcast(comm, dp[i - 1], 0);
-		fmt::println("[mainnode] item {}: broadcast complete", i);
+		SPDLOG_DEBUG("[mainnode] item {}: broadcasting dp[{}] (size {})", i, i - 1, capacity + 1);
+		int row_size = static_cast<int>(dp[i - 1].size());
+		broadcast(comm, row_size, 0);
+		broadcast(comm, dp[i - 1].data(), row_size, 0);
+		SPDLOG_DEBUG("[mainnode] item {}: broadcast complete", i);
 
 		std::deque<NodeTask> tasks;
 		for (int w = 0; w <= capacity; w += chunk_size)
 		{
 			tasks.push_back({w, std::min(w + chunk_size - 1, capacity)});
 		}
-		fmt::println("[mainnode] item {}: {} tasks created", i, tasks.size());
+		SPDLOG_DEBUG("[mainnode] item {}: {} tasks created", i, tasks.size());
 
 		int num_tasks = static_cast<int>(tasks.size());
 		int in_flight = 0;
@@ -82,24 +84,24 @@ static KnapsackSolution mainnode(boost::mpi::communicator &comm, const std::vect
 		{
 			auto task = tasks.front();
 			tasks.pop_front();
-			fmt::println("[mainnode] item {}: sending TASK[{},{}] to rank {}", i, task.startIndex, task.endIndex, rank);
+			SPDLOG_DEBUG("[mainnode] item {}: sending TASK[{},{}] to rank {}", i, task.startIndex, task.endIndex, rank);
 			comm.send(rank, NODETAG::TASK, task);
 			in_flight++;
 		}
-		fmt::println("[mainnode] item {}: {} tasks sent initially, {} remaining", i, in_flight, tasks.size());
+		SPDLOG_DEBUG("[mainnode] item {}: {} tasks sent initially, {} remaining", i, in_flight, tasks.size());
 		int completed = 0;
 		while (completed < num_tasks)
 		{
-			NodeResponse resp;
+			NodeResponse resp{};
 			NodeResponseData data;
-			fmt::println("[mainnode] item {}: waiting for RESPONSE (any_source)", i);
+			SPDLOG_DEBUG("[mainnode] item {}: waiting for RESPONSE (any_source)", i);
 			auto status = comm.recv(any_source, NODETAG::RESPONSE, resp);
-			fmt::println("[mainnode] item {}: got RESPONSE from rank {}, start={}, end={}", i, status.source(),
+			SPDLOG_DEBUG("[mainnode] item {}: got RESPONSE from rank {}, start={}, end={}", i, status.source(),
 						 resp.startIndex, resp.endIndex);
 
-			fmt::println("[mainnode] item {}: receiving DATA from rank {}", i, status.source());
+			SPDLOG_DEBUG("[mainnode] item {}: receiving DATA from rank {}", i, status.source());
 			comm.recv(status.source(), NODETAG::DATA, data);
-			fmt::println("[mainnode] item {}: received DATA, line.size={}", i, data.line.size());
+			SPDLOG_DEBUG("[mainnode] item {}: received DATA, line.size={}", i, data.line.size());
 
 			for (int w = resp.startIndex; w <= resp.endIndex; ++w)
 			{
@@ -111,24 +113,23 @@ static KnapsackSolution mainnode(boost::mpi::communicator &comm, const std::vect
 			{
 				auto task = tasks.front();
 				tasks.pop_front();
-				fmt::println("[mainnode] item {}: sending next TASK[{},{}] to rank {}", i, task.startIndex,
+				SPDLOG_DEBUG("[mainnode] item {}: sending next TASK[{},{}] to rank {}", i, task.startIndex,
 							 task.endIndex, status.source());
 				comm.send(status.source(), NODETAG::TASK, task);
-				fmt::println("[mainnode] item {}: posted irecv for rank {}", i, status.source());
+				SPDLOG_DEBUG("[mainnode] item {}: posted irecv for rank {}", i, status.source());
 			}
 		}
-		fmt::println("[mainnode] item {}: all tasks complete, sending TERMINATE", i);
+		SPDLOG_DEBUG("[mainnode] item {}: all tasks complete, sending TERMINATE", i);
 
 		for (int rank = 1; rank <= num_workers; ++rank)
 		{
-			comm.send(rank, NODETAG::TERMINATE);
-			comm.recv(rank, NODETAG::RESPONSE); // wait for worker to acknowledge termination
+			NodeResponse resp{};
+			comm.send(rank, NODETAG::TERMINATE, NodeTask{0, 0});
+			comm.recv(rank, NODETAG::RESPONSE,resp); // wait for worker to acknowledge termination
 		}
-		fmt::println("[mainnode] item {}: done", i);
+		SPDLOG_DEBUG("[mainnode] item {}: done", i);
 	}
-
-	fmt::println("[mainnode] DP complete, optimal value = {}", dp[n][capacity]);
-
+	SPDLOG_DEBUG("[mainnode] DP complete, optimal value = {}", dp[n][capacity]);
 	KnapsackSolution solution;
 	solution.totalValue = dp[n][capacity];
 	solution.totalWeight = 0;
@@ -149,11 +150,19 @@ static void workernode(boost::mpi::communicator &comm, const std::vector<int> &w
 {
 	using namespace boost::mpi;
 	int n = static_cast<int>(weights.size());
-	std::vector<uint32_t> line(capacity + 1, 0);
+	std::vector<uint32_t> line;
 
 	for (int i = 1; i <= n; ++i)
 	{
-		broadcast(comm, line, 0);
+		line.clear();
+		line.resize(capacity + 1, 0);
+		SPDLOG_DEBUG("[workernode] item {}: waiting for broadcast of dp[{}]", i, i - 1);
+		int row_size;
+		broadcast(comm, row_size, 0);
+		SPDLOG_DEBUG("[workernode] item {}: received row_size = {}", i, row_size);
+		if (static_cast<int>(line.size()) != row_size)
+			line.resize(row_size);
+		broadcast(comm, line.data(), row_size, 0);
 
 		bool end = false;
 		while (!end)
@@ -164,15 +173,17 @@ static void workernode(boost::mpi::communicator &comm, const std::vector<int> &w
 			if (status.tag() == NODETAG::TERMINATE)
 			{
 				end = true;
+				SPDLOG_DEBUG("[workernode] item {}: received TERMINATE from rank {}", i, status.source());
 				comm.send(status.source(), NODETAG::RESPONSE, NodeResponse{0, 0}); // acknowledge termination
 				continue;
 			}
 
+			auto prev = line;
 			for (int w = task.startIndex; w <= task.endIndex; ++w)
 			{
 				if (weights[i - 1] <= w)
 				{
-					line[w] = std::max(line[w], line[w - weights[i - 1]] + values[i - 1]);
+					line[w] = std::max(prev[w], prev[w - weights[i - 1]] + values[i - 1]);
 				}
 			}
 

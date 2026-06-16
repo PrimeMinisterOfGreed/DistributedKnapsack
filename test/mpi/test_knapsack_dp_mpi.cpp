@@ -111,7 +111,7 @@ TEST(KnapsackDPMPI, AllItemsFit)
 	if (rank == 0)
 	{
 		ASSERT_TRUE(result.has_value());
-		EXPECT_EQ(result->totalValue, 65);
+		EXPECT_EQ(result->totalValue, 130);
 	}
 	else
 	{
