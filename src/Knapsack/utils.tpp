@@ -90,7 +90,6 @@ void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num
 	}
 }
 
-
 /**
  * @brief Generate CopaSubset combinations from an input range of (weight, value) items.
  *
@@ -112,8 +111,8 @@ std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r,
 		std::vector<CopaSubset> shifted = subsets;
 		auto [w, v] = item;
 
-		#pragma omp parallel for num_threads(numthreads)
-		for(int i = 0; i < static_cast<int>(shifted.size()); i++)
+#pragma omp parallel for num_threads(numthreads)
+		for (int i = 0; i < static_cast<int>(shifted.size()); i++)
 		{
 			shifted[i].addItem(item_idx, w, v);
 		}
@@ -167,7 +166,7 @@ void distribute_block_per_processor(const CopaRange auto &input, CopaBlockOutput
 	return;
 }
 
-int prune(const CopaRange auto &A, const CopaRange auto &B, CopaBlockPairingOutRange auto &blocks, int capacity,
+void prune(const CopaRange auto &A, const CopaRange auto &B, CopaBlockPairingOutRange auto &blocks, int capacity,
 		  int threads = 1)
 {
 	int k = std::max(1, threads);
@@ -176,7 +175,7 @@ int prune(const CopaRange auto &A, const CopaRange auto &B, CopaBlockPairingOutR
 
 	if (k <= 0 || capacity < 0)
 	{
-		return 0;
+		return;
 	}
 
 	std::vector<CopaBlock> blocksA(k);
@@ -187,31 +186,28 @@ int prune(const CopaRange auto &A, const CopaRange auto &B, CopaBlockPairingOutR
 
 	if (k <= 0 || capacity < 0)
 	{
-		return 0;
+		return;
 	}
 
 	// Algorithm 4: Parallel pruning algorithm
 	// Each processor Pi (i from 0 to k-1) checks block pairs (Ai, B_{j mod k}) for j = i to k+i-1
 	std::vector<std::vector<std::pair<CopaBlock, CopaBlock>>> local_results(k);
-	int best_value = 0;
 
-#pragma omp parallel for num_threads(threads) reduction(max : best_value)
+#pragma omp parallel for num_threads(threads) 
 	for (int i = 0; i < k; ++i)
 	{
 		const auto &blockA = blocksA[i];
-		if (blockA.block.empty())
-			continue;
-
+		int best_value = 0;
 		for (int j = i; j < k + i; ++j)
 		{
 			int b_idx = j % k;
 			const auto &blockB = blocksB[b_idx];
 			if (blockB.block.empty())
 				continue;
-
 			int Z = blockA.block.front().totalWeight + blockB.block.back().totalWeight;
 			int Y = blockA.block.back().totalWeight + blockB.block.front().totalWeight;
 
+			// Note: prune is done by not adding the pair to local_results
 			if (Y <= capacity)
 			{
 				// All pairs in this block pair are valid; save max profit and prune
@@ -223,7 +219,6 @@ int prune(const CopaRange auto &A, const CopaRange auto &B, CopaBlockPairingOutR
 			}
 			else if (Z <= capacity && Y > capacity)
 			{
-				// Some pairs may be valid; keep this block pair for further search
 				local_results[i].emplace_back(blockA, blockB);
 			}
 			else if (Z > capacity)
@@ -239,112 +234,6 @@ int prune(const CopaRange auto &A, const CopaRange auto &B, CopaBlockPairingOutR
 		blocks.insert(blocks.end(), local.begin(), local.end());
 	}
 
-	return best_value;
-}
-
-template <std::ranges::input_range Range, std::ranges::output_range<const typename Range::value_type> OutputRange>
-void parallel_save_max_value(Range &input, OutputRange &output, int num_threads)
-{
-	using ValueType = typename Range::value_type;
-	int n = static_cast<int>(std::ranges::size(input));
-
-	if (n == 0)
-		return;
-
-	int threads = std::max(1, num_threads);
-	threads = std::min(threads, n);
-
-	if (threads == 1)
-	{
-		// Sequential backward scan for suffix max
-		std::vector<ValueType> result;
-		result.reserve(n);
-
-		auto it = std::ranges::begin(input);
-		std::advance(it, n - 1);
-		ValueType current_max = *it;
-		result.push_back(current_max);
-
-		for (int j = n - 2; j >= 0; --j)
-		{
-			--it;
-			if (it->totalValue > current_max.totalValue)
-			{
-				current_max = *it;
-			}
-			result.push_back(current_max);
-		}
-
-		std::reverse(result.begin(), result.end());
-		std::ranges::copy(result, std::back_inserter(output));
-		return;
-	}
-
-	// Parallel version: divide into chunks and compute local suffix max
-	std::vector<ValueType> result(n);
-	std::vector<ValueType> chunk_maxes(threads);
-
-	int chunk_size = n / threads;
-	int remainder = n % threads;
-
-#pragma omp parallel for num_threads(threads)
-	for (int t = 0; t < threads; ++t)
-	{
-		int start = t * chunk_size + std::min(t, remainder);
-		int end = start + chunk_size + (t < remainder ? 1 : 0);
-
-		if (start >= end)
-		{
-			chunk_maxes[t] = ValueType{};
-			continue;
-		}
-
-		auto it = std::ranges::begin(input);
-		std::advance(it, end - 1);
-		result[end - 1] = *it;
-		ValueType local_max = *it;
-
-		for (int j = end - 2; j >= start; --j)
-		{
-			--it;
-			if (it->totalValue > local_max.totalValue)
-			{
-				local_max = *it;
-			}
-			result[j] = local_max;
-		}
-
-		chunk_maxes[t] = local_max;
-	}
-
-	// Compute suffix max of chunk maxes
-	for (int t = threads - 2; t >= 0; --t)
-	{
-		if (chunk_maxes[t + 1].totalValue > chunk_maxes[t].totalValue)
-		{
-			chunk_maxes[t] = chunk_maxes[t + 1];
-		}
-	}
-
-	// Adjust each chunk with the suffix max of subsequent chunks
-	for (int t = threads - 2; t >= 0; --t)
-	{
-		int start = t * chunk_size + std::min(t, remainder);
-		int end = start + chunk_size + (t < remainder ? 1 : 0);
-
-		if (start >= end)
-			continue;
-
-		for (int j = start; j < end; ++j)
-		{
-			if (chunk_maxes[t + 1].totalValue > result[j].totalValue)
-			{
-				result[j] = chunk_maxes[t + 1];
-			}
-		}
-	}
-
-	std::ranges::copy(result, std::back_inserter(output));
 }
 
 /**
@@ -359,6 +248,8 @@ void parallel_save_max_value(Range &input, OutputRange &output, int num_threads)
  * @param globalStartIdx The starting index of this block in the full B array
  * @param suffixMaxValues Output: suffix max totalValue at each position
  * @param suffixMaxIndices Output: global B-index achieving that suffix max at each position
+ * @warning This function is intended to be called by each thread on its assigned block; it does not perform any
+ * parallelization itself.
  */
 inline void block_suffix_max_values(const CopaRange auto &block, int globalStartIdx,
 									std::ranges::output_range<int> auto &suffixMaxValues,
@@ -383,6 +274,57 @@ inline void block_suffix_max_values(const CopaRange auto &block, int globalStart
 			suffixMaxValues[j] = suffixMaxValues[j + 1];
 			suffixMaxIndices[j] = suffixMaxIndices[j + 1];
 		}
+	}
+}
+
+void parallel_save_max(const CopaRange auto &A, const CopaRange auto &B,
+					   const CopaBlockPairingOutRange auto &remainingPairs,
+					   std::ranges::output_range<int> auto &processBestVal,
+					   std::ranges::output_range<int> auto &processBestAIdx,
+					   std::ranges::output_range<int> auto &processBestBIdx, int capacity, int k)
+{
+#pragma omp parallel for num_threads(k)
+	for (int i = 0; i < k; ++i)
+	{
+		const auto &blockA = remainingPairs[i].first;
+		const auto &blockB = remainingPairs[i].second;
+
+		int eA = static_cast<int>(blockA.block.size());
+		int eB = static_cast<int>(blockB.block.size());
+
+		if (eA == 0 || eB == 0)
+			continue;
+
+		int aGlobalStart = static_cast<int>(blockA.block.data() - A.data());
+		int bGlobalStart = static_cast<int>(blockB.block.data() - B.data());
+
+		// Stage 4: Suffix max for this B block
+		std::vector<int> suffixMaxVal(eB);
+		std::vector<int> suffixMaxIdx(eB);
+		block_suffix_max_values(blockB.block, bGlobalStart, suffixMaxVal, suffixMaxIdx);
+
+		// Stage 5: Two-pointer search within this block pair
+		int x = 0, y = 0;
+		int bestVal = 0, bestA = 0, bestB = 0;
+		while (x < eA && y < eB)
+		{
+			if (blockA.block[x].totalWeight + blockB.block[y].totalWeight > capacity)
+			{
+				y++;
+				continue;
+			}
+			int candidate = blockA.block[x].totalValue + suffixMaxVal[y];
+			if (candidate > bestVal)
+			{
+				bestVal = candidate;
+				bestA = aGlobalStart + x;
+				bestB = suffixMaxIdx[y];
+			}
+			x++;
+		}
+		processBestVal[i] = bestVal;
+		processBestAIdx[i] = bestA;
+		processBestBIdx[i] = bestB;
 	}
 }
 

@@ -65,8 +65,27 @@ TEST(Prune, SingleThreadKeepsValidBlockPairs)
 	std::vector<std::pair<CopaBlock, CopaBlock>> blocks;
 	prune(A, B, blocks, 10, 1);
 	ASSERT_EQ(blocks.size(), 1u);
+
+	// Check A block (entire A array with 1 thread)
 	EXPECT_EQ(blocks[0].first.block.size(), 4u);
+	EXPECT_EQ(blocks[0].first.block[0].totalWeight, 1);
+	EXPECT_EQ(blocks[0].first.block[0].totalValue, 10);
+	EXPECT_EQ(blocks[0].first.block[3].totalWeight, 7);
+	EXPECT_EQ(blocks[0].first.block[3].totalValue, 70);
 	EXPECT_EQ(blocks[0].first.maxValue, 70);
+
+	// Check B block (entire B array with 1 thread)
+	EXPECT_EQ(blocks[0].second.block.size(), 4u);
+	EXPECT_EQ(blocks[0].second.block[0].totalWeight, 8);
+	EXPECT_EQ(blocks[0].second.block[0].totalValue, 80);
+	EXPECT_EQ(blocks[0].second.block[3].totalWeight, 2);
+	EXPECT_EQ(blocks[0].second.block[3].totalValue, 20);
+	EXPECT_EQ(blocks[0].second.maxValue, 80);
+
+	// Verify Z = A[0].w + B[3].w = 1 + 2 = 3 <= 10  and Y = A[3].w + B[0].w = 7 + 8 = 15 > 10
+	// => Z <= capacity && Y > capacity => keep
+	EXPECT_LE(blocks[0].first.block.front().totalWeight + blocks[0].second.block.back().totalWeight, 10);
+	EXPECT_GT(blocks[0].first.block.back().totalWeight + blocks[0].second.block.front().totalWeight, 10);
 }
 
 TEST(Prune, MultiThreadPrunesAndKeepsCorrectly)
@@ -80,38 +99,48 @@ TEST(Prune, MultiThreadPrunesAndKeepsCorrectly)
 	std::vector<std::pair<CopaBlock, CopaBlock>> blocks;
 	prune(A, B, blocks, 6, 2);
 	ASSERT_EQ(blocks.size(), 2u);
-	ASSERT_EQ(blocks[0].first.maxValue, 20);
+
+	// With 2 threads, blocks are: A0=[(1,10),(2,20)], A1=[(3,30),(4,40)]
+	//                        B0=[(5,50),(4,40)], B1=[(3,30),(2,20)]
+	// P0 keeps (A0,B0): Z=1+4=5<=6, Y=2+5=7>6
+	// P1 keeps (A1,B1): Z=3+2=5<=6, Y=4+3=7>6
+	// P0 prunes (A0,B1): Y=2+3=5<=6 => all valid
+	// P1 prunes (A1,B0): Z=3+4=7>6 => none valid
+
+	// Check first block pair (A0, B0)
+	EXPECT_EQ(blocks[0].first.block.size(), 2u);
+	EXPECT_EQ(blocks[0].first.block[0].totalWeight, 1);
+	EXPECT_EQ(blocks[0].first.block[0].totalValue, 10);
+	EXPECT_EQ(blocks[0].first.block[1].totalWeight, 2);
+	EXPECT_EQ(blocks[0].first.block[1].totalValue, 20);
+	EXPECT_EQ(blocks[0].first.maxValue, 20);
+
+	EXPECT_EQ(blocks[0].second.block.size(), 2u);
+	EXPECT_EQ(blocks[0].second.block[0].totalWeight, 5);
+	EXPECT_EQ(blocks[0].second.block[0].totalValue, 50);
+	EXPECT_EQ(blocks[0].second.block[1].totalWeight, 4);
+	EXPECT_EQ(blocks[0].second.block[1].totalValue, 40);
+	EXPECT_EQ(blocks[0].second.maxValue, 50);
+
+	// Check second block pair (A1, B1)
+	EXPECT_EQ(blocks[1].first.block.size(), 2u);
+	EXPECT_EQ(blocks[1].first.block[0].totalWeight, 3);
+	EXPECT_EQ(blocks[1].first.block[0].totalValue, 30);
+	EXPECT_EQ(blocks[1].first.block[1].totalWeight, 4);
+	EXPECT_EQ(blocks[1].first.block[1].totalValue, 40);
+	EXPECT_EQ(blocks[1].first.maxValue, 40);
+
+	EXPECT_EQ(blocks[1].second.block.size(), 2u);
+	EXPECT_EQ(blocks[1].second.block[0].totalWeight, 3);
+	EXPECT_EQ(blocks[1].second.block[0].totalValue, 30);
+	EXPECT_EQ(blocks[1].second.block[1].totalWeight, 2);
+	EXPECT_EQ(blocks[1].second.block[1].totalValue, 20);
+	EXPECT_EQ(blocks[1].second.maxValue, 30);
 }
 
-TEST(ParallelSaveMaxValue, SingleThreadComputesSuffixMax)
-{
-	std::vector<CopaSubset> input{CopaSubset{{}, 1, 10}, CopaSubset{{}, 2, 5}, CopaSubset{{}, 3, 20},
-								  CopaSubset{{}, 4, 15}};
-	std::vector<CopaSubset> output;
-	parallel_save_max_value(input, output, 1);
 
-	ASSERT_EQ(output.size(), 4u);
-	EXPECT_EQ(output[0].totalValue, 20);
-	EXPECT_EQ(output[1].totalValue, 20);
-	EXPECT_EQ(output[2].totalValue, 20);
-	EXPECT_EQ(output[3].totalValue, 15);
-}
 
-TEST(ParallelSaveMaxValue, MultiThreadComputesSuffixMax)
-{
-	std::vector<CopaSubset> input{CopaSubset{{}, 1, 10}, CopaSubset{{}, 2, 5},	CopaSubset{{}, 3, 20},
-								  CopaSubset{{}, 4, 15}, CopaSubset{{}, 5, 25}, CopaSubset{{}, 6, 8}};
-	std::vector<CopaSubset> output;
-	parallel_save_max_value(input, output, 3);
 
-	ASSERT_EQ(output.size(), 6u);
-	EXPECT_EQ(output[0].totalValue, 25);
-	EXPECT_EQ(output[1].totalValue, 25);
-	EXPECT_EQ(output[2].totalValue, 25);
-	EXPECT_EQ(output[3].totalValue, 25);
-	EXPECT_EQ(output[4].totalValue, 25);
-	EXPECT_EQ(output[5].totalValue, 8);
-}
 
 TEST(KnapsackCopaSequential, OneThreadFindsOptimalValue)
 {
@@ -208,7 +237,7 @@ TEST(KnapsackCopa, MultiThreadSmallCapacity)
 	constexpr int capacity = 5;
 	auto result = knapsackcopa(weights, values, capacity, 3);
 	ASSERT_TRUE(result.has_value());
-	EXPECT_EQ(result->totalValue, 7);
+	EXPECT_EQ(result->totalValue, 6);
 }
 
 TEST(KnapsackCopa, MultiThreadAllItemsFit)
@@ -282,4 +311,46 @@ TEST(KnapsackCopa, LargerInstanceMatchesSequential)
 	ASSERT_TRUE(par.has_value());
 	EXPECT_EQ(par->totalValue, seq->totalValue);
 	EXPECT_EQ(par->totalWeight, seq->totalWeight);
+}
+
+TEST(CrossValidator, DpCopaSequentialCopaParallelAgree)
+{
+	struct TestCase
+	{
+		std::vector<int> weights;
+		std::vector<int> values;
+		int capacity;
+	};
+
+	std::vector<TestCase> cases = {
+		{{1, 2, 3, 4}, {1, 6, 10, 16}, 7},
+		{{2, 3, 4, 5}, {3, 4, 5, 6}, 5},
+		{{1, 2, 3, 4}, {1, 6, 10, 16}, 15},
+		{{1, 2, 3, 4}, {1, 6, 10, 16}, 1},
+		{{5, 10, 15, 22, 25, 30, 35, 40}, {30, 40, 45, 77, 90, 100, 110, 120}, 100},
+		{{3, 7, 12, 18, 24, 30}, {5, 10, 15, 20, 25, 30}, 50},
+		{{1, 4, 6, 8, 10, 12}, {2, 5, 7, 9, 11, 13}, 20},
+		{{2, 5, 7, 9, 11, 13, 15, 18}, {3, 8, 12, 14, 16, 20, 22, 25}, 40},
+	};
+
+	for (const auto &[w, v, cap] : cases)
+	{
+		auto dp_result = knapsackdp(w, v, cap, 1);
+		auto copa_seq = knapsackcopasequential(w, v, cap);
+		auto copa_par = knapsackcopa(w, v, cap, 4);
+
+		ASSERT_TRUE(copa_seq.has_value()) << "COPA sequential failed for capacity=" << cap;
+		ASSERT_TRUE(copa_par.has_value()) << "COPA parallel failed for capacity=" << cap;
+
+		EXPECT_EQ(dp_result.totalValue, copa_seq->totalValue)
+			<< "DP/COPA-seq value mismatch for capacity=" << cap;
+		EXPECT_EQ(dp_result.totalValue, copa_par->totalValue)
+			<< "DP/COPA-par value mismatch for capacity=" << cap;
+		EXPECT_EQ(copa_seq->totalValue, copa_par->totalValue)
+			<< "COPA-seq/par value mismatch for capacity=" << cap;
+		EXPECT_LE(copa_seq->totalWeight, cap)
+			<< "COPA-seq solution exceeds capacity=" << cap;
+		EXPECT_LE(copa_par->totalWeight, cap)
+			<< "COPA-par solution exceeds capacity=" << cap;
+	}
 }

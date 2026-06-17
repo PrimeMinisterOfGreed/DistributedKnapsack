@@ -1,10 +1,7 @@
 
-#include "Actors/root.hpp"
-#include "Actors/worker.hpp"
 #include "options_bag.hpp"
 #include <boost/mpi.hpp>
 #include <boost/program_options.hpp>
-#include <log_engine.hpp>
 #include <mpi/mpi.h>
 #include <print>
 #include <string>
@@ -25,11 +22,9 @@ void mpi_routine(int argc, char **argv)
 	auto rank = comm.rank();
 	if (rank == 0)
 	{
-		std::println("Master PID:{}", getpid());
 	}
 	else
 	{
-		std::println("Process {}, pid {}", rank, getpid());
 	}
 
 	MPI_Finalize();
@@ -66,7 +61,6 @@ int main(int argc, char *argv[])
 	}
 	if (vm.count("help"))
 	{
-		std::println("Usage: {} [options]", argv[0]);
     desc.print(std::cout);
 		return 0;
 	}

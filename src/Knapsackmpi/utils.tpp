@@ -2,6 +2,7 @@
 #include "Knapsack/utils.tpp"
 #include <boost/mpi.hpp>
 #include <fmt/core.h>
+#include <boost/mpi/collectives.hpp>
 
 using communicator = boost::mpi::communicator;
 
@@ -176,8 +177,7 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 
 #pragma region Optimizers
 
-constexpr void mpi_distribute_block_per_process(communicator &comm, const CopaRange auto &input,
-												CopaBlock &output)
+void mpi_distribute_block_per_process(communicator &comm, const CopaRange auto &input, CopaBlock  &output)
 {
 	using value_type = std::ranges::range_value_t<decltype(input)>;
 	int n = static_cast<int>(std::ranges::size(input));
@@ -212,4 +212,40 @@ constexpr void mpi_distribute_block_per_process(communicator &comm, const CopaRa
 	output = {std::span<const CopaSubset>(local_data), max_val};
 }
 
+int prune(const CopaRange auto &A, const CopaRange auto &B, CopaBlockPairingOutRange auto &blocks, int capacity)
+{
+	using namespace boost::mpi;
+
+	communicator comm;
+	int n = static_cast<int>(std::ranges::size(A));
+
+	if (n == 0 || static_cast<int>(std::ranges::size(B)) != n || capacity < 0)
+		return 0;
+
+	CopaBlock localBlockA{}, localBlockB{};
+	mpi_distribute_block_per_process(comm, A, localBlockA);
+	mpi_distribute_block_per_process(comm, B, localBlockB);
+
+	if (localBlockA.block.empty() || localBlockB.block.empty())
+		return 0;
+
+	int Z = localBlockA.block.front().totalWeight + localBlockB.block.back().totalWeight;
+	int Y = localBlockA.block.back().totalWeight + localBlockB.block.front().totalWeight;
+
+	int local_best = 0;
+
+	if (Y <= capacity)
+	{
+		local_best = localBlockA.maxValue + localBlockB.maxValue;
+	}
+	else if (Z <= capacity && Y > capacity)
+	{
+		if (comm.rank() == 0)
+			blocks.emplace_back(localBlockA, localBlockB);
+	}
+
+	int best_value = 0;
+	all_reduce(comm, local_best, best_value, maximum<int>());
+	return best_value;
+}
 #pragma endregion

@@ -92,85 +92,20 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 
 	// Stage 3: Parallel pruning
 	std::vector<std::pair<CopaBlock, CopaBlock>> remainingPairs;
-	int bestValue = prune(A, B, remainingPairs, capacity, numThreads);
+	prune(A, B, remainingPairs, capacity, numThreads);
 
 	int k = static_cast<int>(remainingPairs.size());
-	if (k == 0)
-	{
-		KnapsackSolution solution{};
-		solution.totalValue = bestValue;
-		if (bestValue > 0)
-		{
-			int bestA = 0, bestB = 0;
-			for (int i = 0; i < N; ++i)
-			{
-				if (A[i].totalValue > A[bestA].totalValue)
-					bestA = i;
-				if (B[i].totalValue > B[bestB].totalValue)
-					bestB = i;
-			}
-
-			solution.totalWeight = A[bestA].totalWeight + B[bestB].totalWeight;
-			auto Aitems = A[bestA].getItemIndices();
-			auto Bitems = B[bestB].getItemIndices();
-			solution.items.reserve(Aitems.size() + Bitems.size());
-			solution.items.insert(solution.items.end(), Aitems.begin(), Aitems.end());
-			solution.items.insert(solution.items.end(), Bitems.begin(), Bitems.end());
-		}
-		return solution;
-	}
 
 	// Stages 4+5: For each remaining block pair, compute suffix max and search
 	std::vector<int> localBestVal(k, 0);
 	std::vector<int> localBestAIdx(k, 0);
 	std::vector<int> localBestBIdx(k, 0);
 
-#pragma omp parallel for num_threads(numThreads)
-	for (int i = 0; i < k; ++i)
-	{
-		const auto &blockA = remainingPairs[i].first;
-		const auto &blockB = remainingPairs[i].second;
-
-		int eA = static_cast<int>(blockA.block.size());
-		int eB = static_cast<int>(blockB.block.size());
-
-		if (eA == 0 || eB == 0)
-			continue;
-
-		int aGlobalStart = static_cast<int>(blockA.block.data() - A.data());
-		int bGlobalStart = static_cast<int>(blockB.block.data() - B.data());
-
-		// Stage 4: Suffix max for this B block
-		std::vector<int> suffixMaxVal(eB);
-		std::vector<int> suffixMaxIdx(eB);
-		block_suffix_max_values(blockB.block, bGlobalStart, suffixMaxVal, suffixMaxIdx);
-
-		// Stage 5: Two-pointer search within this block pair
-		int x = 0, y = 0;
-		int bestVal = 0, bestA = 0, bestB = 0;
-		while (x < eA && y < eB)
-		{
-			if (blockA.block[x].totalWeight + blockB.block[y].totalWeight > capacity)
-			{
-				y++;
-				continue;
-			}
-			int candidate = blockA.block[x].totalValue + suffixMaxVal[y];
-			if (candidate > bestVal)
-			{
-				bestVal = candidate;
-				bestA = aGlobalStart + x;
-				bestB = suffixMaxIdx[y];
-			}
-			x++;
-		}
-		localBestVal[i] = bestVal;
-		localBestAIdx[i] = bestA;
-		localBestBIdx[i] = bestB;
-	}
+	parallel_save_max(A, B, remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k);
 
 	// Reduce across all remaining pairs
-	int bestAIdx = 0, bestBIdx = 0;
+	int bestAIdx = 0, bestBIdx = 0, bestValue = 0;
+#pragma omp parallel for num_threads(k) reduction(max : bestValue)
 	for (int i = 0; i < k; ++i)
 	{
 		if (localBestVal[i] > bestValue)
