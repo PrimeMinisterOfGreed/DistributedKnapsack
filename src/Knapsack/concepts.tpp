@@ -21,6 +21,9 @@ concept CopaOutputRange = std::ranges::output_range<Range, const typename Range:
 template <typename Range>
 concept CopaBlockOutputRange = std::ranges::output_range<Range, CopaBlock>;
 
+template<typename Range>
+concept CopaBlockInputRange = std::ranges::input_range<Range> && std::same_as<typename Range::value_type, CopaBlock>;
+
 template <typename T>
 concept CopaBlockPairingOutRange = std::ranges::output_range<T, std::pair<CopaBlock, CopaBlock>>;
 template<typename CorankComparable>

@@ -1,6 +1,7 @@
 #pragma once
 #include "Knapsack/knapsackcopa.hpp"
 #include "concepts.tpp"
+#include "panic.hpp"
 #include <algorithm>
 #include <iterator>
 #include <ranges>
@@ -166,24 +167,12 @@ void distribute_block_per_processor(const CopaRange auto &input, CopaBlockOutput
 	return;
 }
 
-void prune(const CopaRange auto &A, const CopaRange auto &B, CopaBlockPairingOutRange auto &blocks, int capacity,
-		  int threads = 1)
+
+
+void prune(const CopaBlockInputRange auto &blocksA, const CopaBlockInputRange auto &blocksB,
+		   CopaBlockPairingOutRange auto &remaining, int capacity, int threads = 1)
 {
-	int k = std::max(1, threads);
-	k = std::min(k, static_cast<int>(std::ranges::size(A)));
-	k = std::min(k, static_cast<int>(std::ranges::size(B)));
-
-	if (k <= 0 || capacity < 0)
-	{
-		return;
-	}
-
-	std::vector<CopaBlock> blocksA(k);
-	std::vector<CopaBlock> blocksB(k);
-
-	distribute_block_per_processor(A, blocksA, threads);
-	distribute_block_per_processor(B, blocksB, threads);
-
+	int k = threads;
 	if (k <= 0 || capacity < 0)
 	{
 		return;
@@ -192,12 +181,11 @@ void prune(const CopaRange auto &A, const CopaRange auto &B, CopaBlockPairingOut
 	// Algorithm 4: Parallel pruning algorithm
 	// Each processor Pi (i from 0 to k-1) checks block pairs (Ai, B_{j mod k}) for j = i to k+i-1
 	std::vector<std::vector<std::pair<CopaBlock, CopaBlock>>> local_results(k);
-
-#pragma omp parallel for num_threads(threads) 
+	int best_value = 0;
+#pragma omp parallel for num_threads(threads) reduction(max : best_value)
 	for (int i = 0; i < k; ++i)
 	{
 		const auto &blockA = blocksA[i];
-		int best_value = 0;
 		for (int j = i; j < k + i; ++j)
 		{
 			int b_idx = j % k;
@@ -231,9 +219,8 @@ void prune(const CopaRange auto &A, const CopaRange auto &B, CopaBlockPairingOut
 	// Merge local results from all processors
 	for (const auto &local : local_results)
 	{
-		blocks.insert(blocks.end(), local.begin(), local.end());
+		remaining.insert(remaining.end(), local.begin(), local.end());
 	}
-
 }
 
 /**
@@ -283,6 +270,9 @@ void parallel_save_max(const CopaRange auto &A, const CopaRange auto &B,
 					   std::ranges::output_range<int> auto &processBestAIdx,
 					   std::ranges::output_range<int> auto &processBestBIdx, int capacity, int k)
 {
+	DBG_ASSERT(k != remainingPairs.size(), "Remaining pairs blocks:{} should be equal to threads:{}",
+			   remainingPairs.size(), k);
+			   
 #pragma omp parallel for num_threads(k)
 	for (int i = 0; i < k; ++i)
 	{

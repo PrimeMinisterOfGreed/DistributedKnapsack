@@ -89,30 +89,76 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	int N = static_cast<int>(A.size());
 	if (N == 0 || static_cast<int>(B.size()) != N)
 		return std::nullopt;
+	// Stage 2 : Parallel suffix max for B (MaxBj and Lj)
+	std::vector<CopaBlock> blocksA(numThreads);
+	std::vector<CopaBlock> blocksB(numThreads);
+
+	distribute_block_per_processor(A, blocksA, numThreads);
+	distribute_block_per_processor(B, blocksB, numThreads);
 
 	// Stage 3: Parallel pruning
 	std::vector<std::pair<CopaBlock, CopaBlock>> remainingPairs;
-	prune(A, B, remainingPairs, capacity, numThreads);
-
-	int k = static_cast<int>(remainingPairs.size());
+	prune(blocksA, blocksB, remainingPairs, capacity, numThreads);
 
 	// Stages 4+5: For each remaining block pair, compute suffix max and search
-	std::vector<int> localBestVal(k, 0);
-	std::vector<int> localBestAIdx(k, 0);
-	std::vector<int> localBestBIdx(k, 0);
-
-	parallel_save_max(A, B, remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k);
-
-	// Reduce across all remaining pairs
+	int k = static_cast<int>(remainingPairs.size());
 	int bestAIdx = 0, bestBIdx = 0, bestValue = 0;
-#pragma omp parallel for num_threads(k) reduction(max : bestValue)
-	for (int i = 0; i < k; ++i)
-	{
-		if (localBestVal[i] > bestValue)
+
+	if (k == 0) {
+		// Fallback: all block pairs were pruned, do two-pointer scan over full A and B
+		// Compute suffix max for B
+		std::vector<int> MaxB(N);
+		std::vector<int> L(N);
+		MaxB[N - 1] = B[N - 1].totalValue;
+		L[N - 1] = static_cast<int>(N - 1);
+
+		for (int i = static_cast<int>(N - 2); i >= 0; i--)
 		{
-			bestValue = localBestVal[i];
-			bestAIdx = localBestAIdx[i];
-			bestBIdx = localBestBIdx[i];
+			if (B[i].totalValue > MaxB[i + 1])
+			{
+				MaxB[i] = B[i].totalValue;
+				L[i] = i;
+			}
+			else
+			{
+				MaxB[i] = MaxB[i + 1];
+				L[i] = L[i + 1];
+			}
+		}
+
+		// Two-pointer search over full arrays
+		int i = 0, j = 0;
+		while (i < static_cast<int>(N) && j < static_cast<int>(N))
+		{
+			if (A[i].totalWeight + B[j].totalWeight > capacity)
+			{
+				j++;
+				continue;
+			}
+			if (A[i].totalValue + MaxB[j] > bestValue)
+			{
+				bestValue = A[i].totalValue + MaxB[j];
+				bestAIdx = i;
+				bestBIdx = L[j];
+			}
+			i++;
+		}
+	} else {
+		std::vector<int> localBestVal(k, 0);
+		std::vector<int> localBestAIdx(k, 0);
+		std::vector<int> localBestBIdx(k, 0);
+
+		parallel_save_max(A, B, remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k);
+
+		// Reduce across all remaining pairs
+		for (int i = 0; i < k; ++i)
+		{
+			if (localBestVal[i] > bestValue)
+			{
+				bestValue = localBestVal[i];
+				bestAIdx = localBestAIdx[i];
+				bestBIdx = localBestBIdx[i];
+			}
 		}
 	}
 

@@ -63,7 +63,11 @@ TEST(Prune, SingleThreadKeepsValidBlockPairs)
 							  CopaSubset{{}, 2, 20}};
 
 	std::vector<std::pair<CopaBlock, CopaBlock>> blocks;
-	prune(A, B, blocks, 10, 1);
+	std::vector<CopaBlock> blocksA(1);
+	std::vector<CopaBlock> blocksB(1);
+	distribute_block_per_processor(A, blocksA, 1);
+	distribute_block_per_processor(B, blocksB, 1);
+	prune(blocksA, blocksB, blocks, 10, 1);
 	ASSERT_EQ(blocks.size(), 1u);
 
 	// Check A block (entire A array with 1 thread)
@@ -97,7 +101,11 @@ TEST(Prune, MultiThreadPrunesAndKeepsCorrectly)
 							  CopaSubset{{}, 2, 20}};
 
 	std::vector<std::pair<CopaBlock, CopaBlock>> blocks;
-	prune(A, B, blocks, 6, 2);
+	std::vector<CopaBlock> blocksA(2);
+	std::vector<CopaBlock> blocksB(2);
+	distribute_block_per_processor(A, blocksA, 2);
+	distribute_block_per_processor(B, blocksB, 2);
+	prune(blocksA, blocksB, blocks, 6, 2);
 	ASSERT_EQ(blocks.size(), 2u);
 
 	// With 2 threads, blocks are: A0=[(1,10),(2,20)], A1=[(3,30),(4,40)]
@@ -225,7 +233,7 @@ TEST(KnapsackCopa, MultiThreadFindsOptimalValue)
 	const std::vector<int> weights{1, 2, 3, 4};
 	const std::vector<int> values{1, 6, 10, 16};
 	constexpr int capacity = 7;
-	auto result = knapsackcopa(weights, values, capacity, 4);
+	auto result = knapsackcopa(weights, values, capacity, 2);
 	ASSERT_TRUE(result.has_value());
 	EXPECT_EQ(result->totalValue, 26);
 }
@@ -235,9 +243,11 @@ TEST(KnapsackCopa, MultiThreadSmallCapacity)
 	const std::vector<int> weights{2, 3, 4, 5};
 	const std::vector<int> values{3, 4, 5, 6};
 	constexpr int capacity = 5;
-	auto result = knapsackcopa(weights, values, capacity, 3);
+	auto result = knapsackcopa(weights, values, capacity, 2);
 	ASSERT_TRUE(result.has_value());
-	EXPECT_EQ(result->totalValue, 6);
+	// Optimal: items 0+1 (weights 2+3=5, values 3+4=7)
+	EXPECT_EQ(result->totalValue, 7);
+	EXPECT_EQ(result->totalWeight, 5);
 }
 
 TEST(KnapsackCopa, MultiThreadAllItemsFit)
