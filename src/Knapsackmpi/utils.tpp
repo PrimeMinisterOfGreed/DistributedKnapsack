@@ -114,7 +114,8 @@ constexpr void mpi_parallel_merge(communicator &comm, const std::vector<CopaSubs
 }
 
 constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
-															const std::ranges::input_range auto &items)
+															const std::ranges::input_range auto &items,
+															bool reverse = false)
 {
 	using namespace boost::mpi;
 	std::vector<CopaSubset> subsets{CopaSubset{}};
@@ -173,6 +174,10 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 		}
 		subsets = std::move(newSubsets);
 	}
+	if (reverse)
+		std::ranges::reverse(subsets);
+	for (int i = 0; i < subsets.size(); i++)
+		subsets[i].index = i;
 	return subsets;
 }
 

@@ -48,7 +48,6 @@ void check_mpi()
 int main(int argc, char **argv)
 {
 	MPI_Init(&argc, &argv);
-
 	spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%@] %v");
 	MPI_Errhandler errhandler;
 	MPI_Comm_create_errhandler(reinterpret_cast<MPI_Comm_errhandler_function *>(mpi_errhandler), &errhandler);

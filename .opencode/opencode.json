@@ -13,8 +13,17 @@
       "models": {
         "Qwen3.5": {
           "name": "Qwen3.5",
+          "reasoning": true,
+          "cost": {
+            "input": 0.40,
+            "output": 0.80
+          },
+          "limit": {
+            "context": 128000,
+            "output": 32000
+          },
           "options": {
-            "max_tokens": 32000
+            "max_tokens": 32000,
           }
         }
       }

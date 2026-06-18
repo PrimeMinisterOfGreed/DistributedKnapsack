@@ -43,18 +43,16 @@ When working with tests:
 
 1. **Review existing tests** in the tests folder to maintain consistency
 2. **Follow testing best practices**: clear test names, proper assertions, isolation
-3. **Ensure test coverage** for edge cases, error conditions, and boundary values
-4. **Write maintainable tests** that are easy to understand and update
-5. **Use proper test organization** following the project's structure
-6. **Run tests after writing** to verify they pass
-7. **Use appropriate test patterns** (arrange-act-assert, given-when-then)
+3. **Write maintainable tests** that are easy to understand and update
+4. **Use proper test organization** following the project's structure
+5. **Run tests after writing** to verify they pass
+6. **Use appropriate test patterns** (arrange-act-assert, given-when-then)
 
 ## Workflow
 
 1. Review existing tests to understand patterns and conventions
 2. Write tests that follow the project's testing framework and style
-3. Run tests to verify they pass
-4. Update tests when code changes break them
+3. Run tests to verify they pass, if they don't pass provide an explanation on the cause that made them don't do and stop
 
 ## Access
 

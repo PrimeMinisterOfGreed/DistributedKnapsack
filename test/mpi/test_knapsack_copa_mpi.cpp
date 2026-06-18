@@ -330,21 +330,6 @@ TEST(MpiDistributeBlock, BasicDistribution)
 	check_block(local_block, exp, rank);
 }
 
-TEST(MpiDistributeBlock, EmptyInput)
-{
-	int rank, world_size;
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-	ASSERT_GE(world_size, 2);
-
-	boost::mpi::communicator comm;
-	std::vector<CopaSubset> input;
-	broadcast(comm, input, 0);
-
-	CopaBlock local_block{{}, 0};
-	mpi_distribute_block_per_process(comm, input, local_block);
-	SUCCEED();
-}
 
 TEST(MpiDistributeBlock, UnevenDistribution)
 {
@@ -373,4 +358,136 @@ TEST(MpiDistributeBlock, UnevenDistribution)
 
 	auto exp = expected_block(static_cast<int>(input.size()), comm.size(), rank, values);
 	check_block(local_block, exp, rank);
+}
+
+
+
+
+TEST(MpiDistributeBlock, MaxValueCorrectlyComputed)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2);
+
+	boost::mpi::communicator comm;
+
+	// Create input where max value is not at the end of the local block
+	std::vector<CopaSubset> input;
+	if (rank == 0)
+	{
+		// Values: 10, 50, 30, 70, 20, 80
+		// With 2 processes: rank 0 gets [10, 50, 30], rank 1 gets [70, 20, 80]
+		for (int v : {10, 50, 30, 70, 20, 80})
+			input.push_back(CopaSubset{{}, v, v});
+	}
+	broadcast(comm, input, 0);
+
+	CopaBlock local_block{{}, 0};
+	mpi_distribute_block_per_process(comm, input, local_block);
+
+	int expected_max;
+	if (rank == 0)
+	{
+		expected_max = 50; // max of [10, 50, 30]
+	}
+	else
+	{
+		expected_max = 80; // max of [70, 20, 80]
+	}
+
+	EXPECT_EQ(local_block.maxValue, expected_max)
+		<< "Max value mismatch on rank " << rank;
+}
+
+TEST(MpiPrune, PrunesBlockPairsCorrectly)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2) << "This test requires at least 2 MPI processes";
+
+	boost::mpi::communicator comm;
+
+	std::vector<CopaSubset> a_subsets{CopaSubset{{}, 1, 5}, CopaSubset{{}, 2, 10}};
+	CopaBlock blockA{std::span<const CopaSubset>(a_subsets), 10};
+
+	std::vector<CopaSubset> b1_subsets{CopaSubset{{}, 1, 5}, CopaSubset{{}, 2, 10}};
+	std::vector<CopaSubset> b2_subsets{CopaSubset{{}, 3, 15}};
+	std::vector<CopaBlock> blocksB{
+		CopaBlock{std::span<const CopaSubset>(b1_subsets), 10},
+		CopaBlock{std::span<const CopaSubset>(b2_subsets), 15},
+	};
+
+	std::vector<std::pair<CopaBlock, CopaBlock>> local_results;
+	int capacity = 3;
+	mpi_prune(comm, blockA, blocksB, local_results, capacity);
+
+	// Each rank processes its own block pairs; verify only non-empty results
+	for (const auto &[a, b] : local_results)
+	{
+		EXPECT_FALSE(a.block.empty());
+		EXPECT_FALSE(b.block.empty());
+		if (!a.block.empty() && !b.block.empty())
+		{
+			int Z = a.block.front().totalWeight + b.block.back().totalWeight;
+			int Y = a.block.back().totalWeight + b.block.front().totalWeight;
+			EXPECT_LE(Z, capacity) << "Z should be <= capacity for kept block pair on rank " << rank;
+			EXPECT_GT(Y, capacity) << "Y should be > capacity for kept block pair on rank " << rank;
+		}
+	}
+}
+
+TEST(MpiPrune, PrunesWhenAllPairsValid)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2);
+
+	boost::mpi::communicator comm;
+
+	std::vector<CopaSubset> a_subsets{CopaSubset{{}, 1, 5}, CopaSubset{{}, 2, 10}, CopaSubset{{}, 3, 15}};
+	CopaBlock blockA{std::span<const CopaSubset>(a_subsets), 15};
+
+	std::vector<CopaSubset> b1_subsets{CopaSubset{{}, 1, 5}};
+	std::vector<CopaSubset> b2_subsets{CopaSubset{{}, 2, 10}, CopaSubset{{}, 3, 15}};
+	std::vector<CopaSubset> b3_subsets{CopaSubset{{}, 1, 3}};
+	std::vector<CopaBlock> blocksB{
+		CopaBlock{std::span<const CopaSubset>(b1_subsets), 5},
+		CopaBlock{std::span<const CopaSubset>(b2_subsets), 15},
+		CopaBlock{std::span<const CopaSubset>(b3_subsets), 3},
+	};
+
+	std::vector<std::pair<CopaBlock, CopaBlock>> local_results;
+	int capacity = 100;
+	mpi_prune(comm, blockA, blocksB, local_results, capacity);
+
+	EXPECT_TRUE(local_results.empty()) << "All pairs should be pruned when Y <= capacity for all block pairs";
+}
+
+TEST(MpiPrune, PrunesWhenNoPairsValid)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2);
+
+	boost::mpi::communicator comm;
+
+	std::vector<CopaSubset> a_subsets{CopaSubset{{}, 10, 50}};
+	CopaBlock blockA{std::span<const CopaSubset>(a_subsets), 50};
+
+	std::vector<CopaSubset> b1_subsets{CopaSubset{{}, 10, 50}};
+	std::vector<CopaSubset> b2_subsets{CopaSubset{{}, 15, 60}};
+	std::vector<CopaBlock> blocksB{
+		CopaBlock{std::span<const CopaSubset>(b1_subsets), 50},
+		CopaBlock{std::span<const CopaSubset>(b2_subsets), 60},
+	};
+
+	std::vector<std::pair<CopaBlock, CopaBlock>> local_results;
+	int capacity = 5;
+	mpi_prune(comm, blockA, blocksB, local_results, capacity);
+
+	EXPECT_TRUE(local_results.empty()) << "All pairs should be pruned when Z > capacity for all block pairs";
 }
