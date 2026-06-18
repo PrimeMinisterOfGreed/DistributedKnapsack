@@ -1,8 +1,9 @@
 #pragma once
 #include "Knapsack/utils.tpp"
 #include <boost/mpi.hpp>
-#include <fmt/core.h>
 #include <boost/mpi/collectives.hpp>
+#include <fmt/core.h>
+#include <ranges>
 
 using communicator = boost::mpi::communicator;
 
@@ -22,7 +23,7 @@ struct CoRankProcedure
 	std::vector<int> b_displacements;
 };
 
-template <typename T> ScatterProcedure compute_scatter_procedure(communicator &comm, const std::vector<T> &data)
+ScatterProcedure compute_scatter_procedure(communicator &comm, const std::ranges::input_range auto &data)
 {
 	ScatterProcedure proc;
 	int total_size = static_cast<int>(data.size());
@@ -41,8 +42,8 @@ template <typename T> ScatterProcedure compute_scatter_procedure(communicator &c
 	return proc;
 }
 
-template <typename T>
-CoRankProcedure compute_corank_procedure(communicator &comm, const std::vector<T> &A, const std::vector<T> &B)
+CoRankProcedure compute_corank_procedure(communicator &comm, const std::ranges::input_range auto &A,
+										 const std::ranges::input_range auto &B)
 {
 	int total_size = static_cast<int>(A.size() + B.size());
 	int num_procs = comm.size();
@@ -177,7 +178,7 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 
 #pragma region Optimizers
 
-void mpi_distribute_block_per_process(communicator &comm, const CopaRange auto &input, CopaBlock  &output)
+constexpr void mpi_distribute_block_per_process(communicator &comm, const CopaRange auto &input, CopaBlock &output)
 {
 	using value_type = std::ranges::range_value_t<decltype(input)>;
 	int n = static_cast<int>(std::ranges::size(input));
@@ -212,40 +213,84 @@ void mpi_distribute_block_per_process(communicator &comm, const CopaRange auto &
 	output = {std::span<const CopaSubset>(local_data), max_val};
 }
 
-int prune(const CopaRange auto &A, const CopaRange auto &B, CopaBlockPairingOutRange auto &blocks, int capacity)
+constexpr void mpi_prune(communicator &comm, const CopaBlock &blockA, const CopaBlockInputRange auto &blocksB,
+						 CopaBlockPairingOutRange auto &blocks, int capacity)
 {
 	using namespace boost::mpi;
-
-	communicator comm;
-	int n = static_cast<int>(std::ranges::size(A));
-
-	if (n == 0 || static_cast<int>(std::ranges::size(B)) != n || capacity < 0)
-		return 0;
-
-	CopaBlock localBlockA{}, localBlockB{};
-	mpi_distribute_block_per_process(comm, A, localBlockA);
-	mpi_distribute_block_per_process(comm, B, localBlockB);
-
-	if (localBlockA.block.empty() || localBlockB.block.empty())
-		return 0;
-
-	int Z = localBlockA.block.front().totalWeight + localBlockB.block.back().totalWeight;
-	int Y = localBlockA.block.back().totalWeight + localBlockB.block.front().totalWeight;
-
-	int local_best = 0;
-
-	if (Y <= capacity)
-	{
-		local_best = localBlockA.maxValue + localBlockB.maxValue;
-	}
-	else if (Z <= capacity && Y > capacity)
-	{
-		if (comm.rank() == 0)
-			blocks.emplace_back(localBlockA, localBlockB);
-	}
-
+	using namespace std::ranges;
+	int k = comm.size();
+	int i = comm.rank();
 	int best_value = 0;
-	all_reduce(comm, local_best, best_value, maximum<int>());
-	return best_value;
+	for (int j = i; j < k + i; ++j)
+	{
+		int b_idx = j % k;
+		const auto &blockB = blocksB[b_idx];
+		if (blockB.block.empty())
+			continue;
+		int Z = blockA.block.front().totalWeight + blockB.block.back().totalWeight;
+		int Y = blockA.block.back().totalWeight + blockB.block.front().totalWeight;
+
+		// Note: prune is done by not adding the pair to local_results
+		if (Y <= capacity)
+		{
+			// All pairs in this block pair are valid; save max profit and prune
+			if (blockA.maxValue + blockB.maxValue > best_value)
+			{
+				best_value = blockA.maxValue + blockB.maxValue;
+			}
+			// Prune block pair (Ai, B_{j mod k})
+		}
+		else if (Z <= capacity && Y > capacity)
+		{
+			blocks.emplace_back(blockA, blockB);
+		}
+		else if (Z > capacity)
+		{
+			// No pairs in this block pair are valid; prune
+		}
+	}
 }
+
+constexpr void mpi_parallel_save_max(communicator &comm, const CopaBlock &blockA, const CopaBlock &blockB,
+									 int &processBestVal, int &processBestAIdx, int &processBestBIdx, int capacity)
+{
+	using namespace boost::mpi;
+	int k = comm.size();
+	int rank = comm.rank();
+
+	int eA = static_cast<int>(blockA.block.size());
+	int eB = static_cast<int>(blockB.block.size());
+
+	if (eA == 0 || eB == 0)
+		return;
+
+	// Stage 4: Suffix max for this B block
+	std::vector<int> suffixMaxVal(eB);
+	std::vector<int> suffixMaxIdx(eB);
+	block_suffix_max_values(blockB.block, suffixMaxVal, suffixMaxIdx);
+
+	// Stage 5: Two-pointer search within this block pair
+	int x = 0, y = 0;
+	int bestVal = 0, bestA = 0, bestB = 0;
+	while (x < eA && y < eB)
+	{
+		if (blockA.block[x].totalWeight + blockB.block[y].totalWeight > capacity)
+		{
+			y++;
+			continue;
+		}
+		int candidate = blockA.block[x].totalValue + suffixMaxVal[y];
+		if (candidate > bestVal)
+		{
+			bestVal = candidate;
+			bestA = blockA.block[x].index;
+			bestB = suffixMaxIdx[y];
+		}
+		x++;
+	}
+	processBestVal = bestVal;
+	processBestAIdx = bestA;
+	processBestBIdx = bestB;
+}
+
 #pragma endregion

@@ -8,7 +8,8 @@ struct CopaSubset
 	std::vector<bool> items;
 	int totalWeight{};
 	int totalValue{};
-
+	int index{};
+	
 	friend class boost::serialization::access;
 	template <class Archive> void serialize(Archive &ar, const unsigned int /*version*/)
 	{

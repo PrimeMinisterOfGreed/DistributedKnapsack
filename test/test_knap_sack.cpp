@@ -314,6 +314,7 @@ TEST(KnapsackCopa, LargerInstanceMatchesSequential)
 	const std::vector<int> values{30, 40, 45, 77, 90, 100, 110, 120};
 	constexpr int capacity = 100;
 
+	auto dpseq = knapsackdp(weights, values, capacity, 1);
 	auto seq = knapsackcopasequential(weights, values, capacity);
 	ASSERT_TRUE(seq.has_value());
 
@@ -321,6 +322,8 @@ TEST(KnapsackCopa, LargerInstanceMatchesSequential)
 	ASSERT_TRUE(par.has_value());
 	EXPECT_EQ(par->totalValue, seq->totalValue);
 	EXPECT_EQ(par->totalWeight, seq->totalWeight);
+	EXPECT_EQ(seq->totalValue, dpseq.totalValue);
+	EXPECT_EQ(seq->totalWeight, dpseq.totalWeight);
 }
 
 TEST(CrossValidator, DpCopaSequentialCopaParallelAgree)

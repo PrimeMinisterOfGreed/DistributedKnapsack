@@ -11,7 +11,7 @@ std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &w
 	auto Alist = take(list, list.size() / 2);
 	auto Blist = drop(list, list.size() / 2);
 	auto A = generate_copa_subsets(Alist);
-	auto B = std::views::reverse(generate_copa_subsets(Blist));
+	auto B = generate_copa_subsets(Blist, 1, true);
 
 	auto N = A.size();
 	if (N == 0 || B.size() != N)
@@ -83,8 +83,7 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	auto Alist = take(list, n / 2);
 	auto Blist = drop(list, n / 2);
 	auto A = generate_copa_subsets(Alist, numThreads);
-	auto B = generate_copa_subsets(Blist, numThreads);
-	std::reverse(B.begin(), B.end());
+	auto B = generate_copa_subsets(Blist, numThreads, true); 
 
 	int N = static_cast<int>(A.size());
 	if (N == 0 || static_cast<int>(B.size()) != N)
@@ -104,7 +103,9 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	int k = static_cast<int>(remainingPairs.size());
 	int bestAIdx = 0, bestBIdx = 0, bestValue = 0;
 
-	if (k == 0) {
+	if (k == 0)
+	{
+		spdlog::warn("pruned all blocks revert to 2 pointers search");
 		// Fallback: all block pairs were pruned, do two-pointer scan over full A and B
 		// Compute suffix max for B
 		std::vector<int> MaxB(N);
@@ -112,6 +113,7 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 		MaxB[N - 1] = B[N - 1].totalValue;
 		L[N - 1] = static_cast<int>(N - 1);
 
+#pragma omp parallel for num_threads(numThreads)
 		for (int i = static_cast<int>(N - 2); i >= 0; i--)
 		{
 			if (B[i].totalValue > MaxB[i + 1])
@@ -143,22 +145,21 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 			}
 			i++;
 		}
-	} else {
-		std::vector<int> localBestVal(k, 0);
-		std::vector<int> localBestAIdx(k, 0);
-		std::vector<int> localBestBIdx(k, 0);
+	}
+	std::vector<int> localBestVal(k, 0);
+	std::vector<int> localBestAIdx(k, 0);
+	std::vector<int> localBestBIdx(k, 0);
 
-		parallel_save_max(A, B, remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k);
+	parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k);
 
-		// Reduce across all remaining pairs
-		for (int i = 0; i < k; ++i)
+	// Reduce across all remaining pairs
+	for (int i = 0; i < k; ++i)
+	{
+		if (localBestVal[i] > bestValue)
 		{
-			if (localBestVal[i] > bestValue)
-			{
-				bestValue = localBestVal[i];
-				bestAIdx = localBestAIdx[i];
-				bestBIdx = localBestBIdx[i];
-			}
+			bestValue = localBestVal[i];
+			bestAIdx = localBestAIdx[i];
+			bestBIdx = localBestBIdx[i];
 		}
 	}
 
