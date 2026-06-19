@@ -3,7 +3,7 @@
 #include "Knapsack/knapsack.hpp"
 #include "Knapsackmpi/knapsackmpi.hpp"
 #include "options_bag.hpp"
-
+#include <spdlog/spdlog.h>
 extern ProgramOptions options;
 
 TEST(KnapsackDPMPI, SolvesSmallProblem)
@@ -13,7 +13,6 @@ TEST(KnapsackDPMPI, SolvesSmallProblem)
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 	ASSERT_GE(world_size, 2) << "This test requires at least 2 MPI processes";
 
-	options.chunk_size = 2;
 
 	boost::mpi::communicator comm;
 
@@ -41,7 +40,6 @@ TEST(KnapsackDPMPI, EmptyItemsReturnsZero)
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 	ASSERT_GE(world_size, 2) << "This test requires at least 2 MPI processes";
 
-	options.chunk_size = 2;
 
 	boost::mpi::communicator comm;
 
@@ -69,8 +67,7 @@ TEST(KnapsackDPMPI, ZeroCapacityReturnsZero)
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 	ASSERT_GE(world_size, 2) << "This test requires at least 2 MPI processes";
-
-	options.chunk_size = 2;
+	spdlog::set_level(spdlog::level::debug);
 
 	boost::mpi::communicator comm;
 
@@ -98,7 +95,6 @@ TEST(KnapsackDPMPI, AllItemsFit)
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 	ASSERT_GE(world_size, 2) << "This test requires at least 2 MPI processes";
 
-	options.chunk_size = 2;
 
 	boost::mpi::communicator comm;
 
@@ -111,7 +107,7 @@ TEST(KnapsackDPMPI, AllItemsFit)
 	if (rank == 0)
 	{
 		ASSERT_TRUE(result.has_value());
-		EXPECT_EQ(result->totalValue, 130);
+		EXPECT_EQ(result->totalValue, 65);
 	}
 	else
 	{

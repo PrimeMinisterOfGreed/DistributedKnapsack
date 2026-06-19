@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include <boost/mpi.hpp>
+#include "Knapsack/knapsack.hpp"
 #include "Knapsack/knapsackcopa.hpp"
+#include "Knapsackmpi/knapsackmpi.hpp"
 #include "Knapsackmpi/utils.tpp"
 TEST(CopaSubsetSerialization, BroadcastBetweenNodes)
 {
@@ -490,4 +492,175 @@ TEST(MpiPrune, PrunesWhenNoPairsValid)
 	mpi_prune(comm, blockA, blocksB, local_results, capacity);
 
 	EXPECT_TRUE(local_results.empty()) << "All pairs should be pruned when Z > capacity for all block pairs";
+}
+
+// Tests for knapsackcopampi
+TEST(KnapsackCopaMPI, SolvesSmallProblem)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2) << "This test requires at least 2 MPI processes";
+
+	boost::mpi::communicator comm;
+
+	// 4 items: weights [1, 2, 3, 4], values [1, 6, 10, 16]
+	// Capacity 7: optimal is items 2,3 (weights 3+4=7, values 10+16=26)
+	const std::vector<int> weights{1, 2, 3, 4};
+	const std::vector<int> values{1, 6, 10, 16};
+	constexpr int capacity = 7;
+
+	auto result = knapsackcopampi(comm, weights, values, capacity);
+
+	if (rank == 0)
+	{
+		ASSERT_TRUE(result.has_value());
+		EXPECT_EQ(result->totalValue, 26);
+		EXPECT_LE(result->totalWeight, capacity);
+	}
+	else
+	{
+		EXPECT_FALSE(result.has_value());
+	}
+}
+
+TEST(KnapsackCopaMPI, EmptyItemsReturnsZero)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2);
+
+	boost::mpi::communicator comm;
+
+	const std::vector<int> weights{};
+	const std::vector<int> values{};
+	constexpr int capacity = 10;
+
+	auto result = knapsackcopampi(comm, weights, values, capacity);
+
+	// knapsackcopampi returns KnapsackSolution{} (empty solution) for empty input on all ranks
+	if (rank == 0)
+	{
+		ASSERT_TRUE(result.has_value());
+		EXPECT_EQ(result->totalValue, 0);
+		EXPECT_TRUE(result->items.empty());
+	}
+}
+
+TEST(KnapsackCopaMPI, SingleItemEachHalf)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2);
+
+	boost::mpi::communicator comm;
+
+	// 2 items: weights [5, 3], values [10, 8]
+	// Capacity 7: can take item 0 (weight 5, value 10) or item 1 (weight 3, value 8)
+	// Best: item 0 with value 10
+	const std::vector<int> weights{5, 3};
+	const std::vector<int> values{10, 8};
+	constexpr int capacity = 7;
+
+	auto result = knapsackcopampi(comm, weights, values, capacity);
+
+	if (rank == 0)
+	{
+		ASSERT_TRUE(result.has_value());
+		EXPECT_EQ(result->totalValue, 10);
+		EXPECT_EQ(result->totalWeight, 5);
+	}
+	else
+	{
+		EXPECT_FALSE(result.has_value());
+	}
+}
+
+TEST(KnapsackCopaMPI, FitsAllItems)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2);
+
+	boost::mpi::communicator comm;
+
+	// 4 items with small weights
+	const std::vector<int> weights{1, 1, 1, 1};
+	const std::vector<int> values{5, 10, 15, 20};
+	constexpr int capacity = 10;
+
+	auto result = knapsackcopampi(comm, weights, values, capacity);
+
+	if (rank == 0)
+	{
+		ASSERT_TRUE(result.has_value());
+		EXPECT_EQ(result->totalValue, 50); // All items
+		EXPECT_EQ(result->totalWeight, 4);
+		EXPECT_EQ(result->items.size(), 4);
+	}
+	else
+	{
+		EXPECT_FALSE(result.has_value());
+	}
+}
+
+TEST(KnapsackCopaMPI, NoItemsFit)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2);
+
+	boost::mpi::communicator comm;
+
+	// 4 items all too heavy
+	const std::vector<int> weights{10, 10, 10, 10};
+	const std::vector<int> values{5, 10, 15, 20};
+	constexpr int capacity = 5;
+
+	auto result = knapsackcopampi(comm, weights, values, capacity);
+
+	if (rank == 0)
+	{
+		ASSERT_TRUE(result.has_value());
+		EXPECT_EQ(result->totalValue, 0);
+		EXPECT_TRUE(result->items.empty());
+	}
+	else
+	{
+		EXPECT_FALSE(result.has_value());
+	}
+}
+
+TEST(KnapsackCopaMPI, MatchesSequentialSolution)
+{
+	int rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	ASSERT_GE(world_size, 2);
+
+	boost::mpi::communicator comm;
+
+	// Random-ish test case with 6 items
+	const std::vector<int> weights{2, 3, 4, 5, 1, 3};
+	const std::vector<int> values{10, 15, 20, 25, 8, 12};
+	constexpr int capacity = 12;
+
+	auto mpi_result = knapsackcopampi(comm, weights, values, capacity);
+	auto seq_result = knapsackcopasequential(weights, values, capacity);
+
+	if (rank == 0)
+	{
+		ASSERT_TRUE(mpi_result.has_value());
+		ASSERT_TRUE(seq_result.has_value());
+		EXPECT_EQ(mpi_result->totalValue, seq_result->totalValue);
+		EXPECT_EQ(mpi_result->totalWeight, seq_result->totalWeight);
+	}
+	else
+	{
+		EXPECT_FALSE(mpi_result.has_value());
+	}
 }

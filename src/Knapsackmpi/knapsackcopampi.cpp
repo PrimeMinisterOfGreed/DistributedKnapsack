@@ -35,6 +35,11 @@ std::optional<KnapsackSolution> knapsackcopampi(boost::mpi::communicator &comm, 
 
 	auto i = comm.rank();
 	prune_block_pair(blocksA[i], blocksB, local_remaining_pairs, capacity, i);
+	if(local_remaining_pairs.empty())
+	{
+		spdlog::warn("Process {} has no remaining pairs after pruning, this may lead to load imbalance", i);
+		return {};
+	}
 	if (local_remaining_pairs.size() > 1)
 	{
 		spdlog::warn("Process {} has {} remaining pairs after pruning, this may lead to load imbalance", i,

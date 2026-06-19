@@ -55,8 +55,7 @@ static KnapsackSolution mainnode(boost::mpi::communicator &comm, const std::vect
 	using namespace boost::mpi;
 	int n = static_cast<int>(weights.size());
 	int num_workers = comm.size() - 1;
-	int chunk_size = get_opts().chunk_size;
-
+	int chunk_size = (capacity+1) / num_workers;
 	SPDLOG_DEBUG("[mainnode] starting: n={}, capacity={}, workers={}, chunk_size={}", n, capacity, num_workers,
 				 chunk_size);
 

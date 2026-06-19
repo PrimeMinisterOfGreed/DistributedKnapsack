@@ -17,4 +17,12 @@ target_sources(${UT_TARGET_NAME} PUBLIC
 )
 target_include_directories(${UT_TARGET_NAME} PUBLIC ${TGT_INCLUDE_DIRS})
 target_link_libraries(${UT_TARGET_NAME} PUBLIC ${TGT_LIBRARIES} PRIVATE GTest::gtest GTest::gtest_main tasker fmt::fmt)
+
+add_test(
+    NAME python_hello_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/python/test_hello.py
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+set_tests_properties(python_hello_test PROPERTIES ENVIRONMENT_MODIFICATION "PYTHONPATH=path_list_prepend:$<TARGET_FILE_DIR:distributed_knapsack>")
+
 add_subdirectory(mpi)
