@@ -4,6 +4,7 @@
 #include "panic.hpp"
 #include <algorithm>
 #include <iterator>
+#include <limits>
 #include <ranges>
 #include <span>
 #include <thread>
@@ -76,7 +77,7 @@ void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num
 
 	if (num_threads <= 1 || total_size == 0)
 	{
-		std::merge(begin(A), end(A), begin(B), end(B), std::back_inserter(output));
+		std::merge(begin(A), end(A), begin(B), end(B), begin(output));
 		return;
 	}
 
@@ -89,6 +90,44 @@ void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num
 		auto [a_end, b_end] = co_rank(A, B, end);
 		std::merge(begin(A) + a_start, begin(A) + a_end, begin(B) + b_start, begin(B) + b_end, begin(output) + start);
 	}
+}
+
+/**
+ * @brief Remove dominated subsets from a weight-sorted list (Pareto frontier).
+ *
+ * A subset A dominates B if A.totalWeight <= B.totalWeight and A.totalValue >= B.totalValue.
+ * Since the input is sorted by weight ascending, a single forward pass suffices:
+ * keep only entries with strictly increasing totalValue.
+ *
+ * @param input Weight-sorted vector of CopaSubset
+ * @return Pareto-optimal frontier (non-dominated subsets only)
+ */
+inline std::vector<CopaSubset> prune_dominated_subsets(const std::vector<CopaSubset> &input)
+{
+	if (input.empty())
+		return {};
+
+	std::vector<CopaSubset> result;
+	int max_value = std::numeric_limits<int>::min();
+	int last_weight = std::numeric_limits<int>::min();
+
+	for (const auto &s : input)
+	{
+		if (s.totalValue > max_value)
+		{
+			if (s.totalWeight == last_weight)
+			{
+				result.back() = s;
+			}
+			else
+			{
+				result.push_back(s);
+				last_weight = s.totalWeight;
+			}
+			max_value = s.totalValue;
+		}
+	}
+	return result;
 }
 
 /**
@@ -119,11 +158,11 @@ std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r,
 			shifted[i].addItem(item_idx, w, v);
 		}
 		item_idx++;
-		std::vector<CopaSubset> newSubsets;
-		newSubsets.resize(subsets.size() + shifted.size());
+		std::vector<CopaSubset> merged;
+		merged.resize(subsets.size() + shifted.size());
 
-		parallel_merge(subsets, shifted, newSubsets, numthreads);
-		subsets = newSubsets;
+		parallel_merge(subsets, shifted, merged, numthreads);
+		subsets = prune_dominated_subsets(merged);
 	}
 
 	if (reverseorder)

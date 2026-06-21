@@ -86,8 +86,6 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	auto B = generate_copa_subsets(Blist, numThreads, true); 
 
 	int N = static_cast<int>(A.size());
-	if (N == 0 || static_cast<int>(B.size()) != N)
-		return std::nullopt;
 	// Stage 2 : Parallel suffix max for B (MaxBj and Lj)
 	std::vector<CopaBlock> blocksA(numThreads);
 	std::vector<CopaBlock> blocksB(numThreads);

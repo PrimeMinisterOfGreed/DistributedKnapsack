@@ -6,10 +6,6 @@ C++23 distributed knapsack solver using MPI, OpenMP, and Boost. Uses Conan for d
 
 ## Build Commands
 
-**Configure and build (clang - default):**
-```bash
-cd build && cmake --preset default-clang && cmake --build .
-```
 
 **Configure and build (gcc):**
 ```bash

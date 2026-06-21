@@ -1,4 +1,5 @@
 #include "Knapsack/knapsack.hpp"
+#include "Knapsackmpi/knapsackmpi.hpp"
 #include <boost/python.hpp>
 #include <iostream>
 
@@ -32,6 +33,45 @@ KnapsackSolution knapsackdpsolver(KnapsackArguments args, int numThreads)
 	return knapsackdp(args.weights, args.values, args.capacity, numThreads);
 }
 
+KnapsackSolution knapsackcopasolver(KnapsackArguments args, int numThreads)
+{
+	auto res = knapsackcopa(args.weights, args.values, args.capacity, numThreads);
+	if (res.has_value())
+		return res.value();
+	else
+	{
+		std::cerr << "Error: No solution found by knapsackcopa" << std::endl;
+		return KnapsackSolution();
+	}
+}
+
+KnapsackSolution knapsackcopasequentialsolver(KnapsackArguments args)
+{
+	auto res = knapsackcopasequential(args.weights, args.values, args.capacity);
+	if (res.has_value())
+		return res.value();
+	else
+	{
+		std::cerr << "Error: No solution found by knapsackcopasequential" << std::endl;
+		return KnapsackSolution();
+	}
+}
+
+KnapsackSolution knapsackcopampisolver(KnapsackArguments args, int numThreads)
+{
+	MPI_Init(NULL, NULL);
+	auto comm = boost::mpi::communicator();	
+	auto res = knapsackcopampi(comm,args.weights, args.values, args.capacity);
+	MPI_Finalize();
+	if (res.has_value())
+		return res.value();
+	else
+	{
+		std::cerr << "Error: No solution found by knapsackcopampi" << std::endl;
+		return KnapsackSolution();
+	}
+}
+
 BOOST_PYTHON_MODULE(libdistributed_knapsack)
 {
 	using namespace boost::python;
@@ -45,5 +85,11 @@ BOOST_PYTHON_MODULE(libdistributed_knapsack)
 		.def_readwrite("values", &KnapsackArguments::values)
 		.def_readwrite("capacity", &KnapsackArguments::capacity);
 	def("knapsackdp", knapsackdpsolver,
+		(boost::python::arg("args"), boost::python::arg("numThreads") = 1));
+	def("knapsackcopa", knapsackcopasolver,
+		(boost::python::arg("args"), boost::python::arg("numThreads") = 1));
+	def("knapsackcopasequential", knapsackcopasequentialsolver,
+		(boost::python::arg("args")));
+	def("knapsackcopampi", knapsackcopampisolver,
 		(boost::python::arg("args"), boost::python::arg("numThreads") = 1));
 }

@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-
+import random
 BUILD_DIR = Path(__file__).parent.parent.parent / "build"
 sys.path.insert(0, str(BUILD_DIR))
 
@@ -11,11 +11,17 @@ def test_hello():
     assert True
 
 def test_knapsackdp():
-    weights = [1, 2, 3]
-    values = [10, 20, 30]
-    capacity = 4
-    result = lib.knapsackdp(weights, values, capacity, 1)
+    random.seed(42)
+    weights = [random.randint(1, 100) for x in range(1, 100)]
+    values = [random.randint(1, 100) for x in range(1, 100)]
+    capacity = random.randint(1, 1000)
+    args = lib.KnapsackArguments(weights, values, capacity)
+    result = lib.knapsackdp(args,1)
     print(f"Knapsack result: {result.totalValue}, Total Weight: {result.totalWeight}")
+    result_copa = lib.knapsackcopa(args,16)
+    print(f"Knapsack COPA result: {result_copa.totalValue}, Total Weight: {result_copa.totalWeight}")
+    result_copa_seq = lib.knapsackcopasequential(args)
+    print(f"Knapsack COPA Sequential result: {result_copa_seq.totalValue}, Total Weight: {result_copa_seq.totalWeight}")
 
 if __name__ == "__main__":
     test_hello()
