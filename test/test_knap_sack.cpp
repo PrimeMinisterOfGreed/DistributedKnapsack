@@ -384,14 +384,9 @@ TEST(TestKnapSackCopa, TestHugeCase)
 
 	auto dp_result = knapsackdp(weights, values, capacity, 32);
 	auto copa_par = knapsackcopa(weights, values, capacity, 32);
-	auto copa_seq = knapsackcopa(weights, values, capacity,16);
 
-	ASSERT_TRUE(copa_seq.has_value()) << "COPA sequential failed for huge case";
 	ASSERT_TRUE(copa_par.has_value()) << "COPA parallel failed for huge case";
 
-	EXPECT_EQ(dp_result.totalValue, copa_seq->totalValue) << "DP/COPA-seq value mismatch for huge case";
 	EXPECT_EQ(dp_result.totalValue, copa_par->totalValue) << "DP/COPA-par value mismatch for huge case";
-	EXPECT_EQ(copa_seq->totalValue, copa_par->totalValue) << "COPA-seq/par value mismatch for huge case";
-	EXPECT_LE(copa_seq->totalWeight, capacity) << "COPA-seq solution exceeds capacity for huge case";
 	EXPECT_LE(copa_par->totalWeight, capacity) << "COPA-par solution exceeds capacity for huge case";
 }

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <boost/mpi.hpp>
+#include <random>
 #include "Knapsack/knapsack.hpp"
 #include "Knapsack/knapsackcopa.hpp"
 #include "Knapsackmpi/knapsackmpi.hpp"
@@ -640,14 +641,20 @@ TEST(KnapsackCopaMPI, MatchesSequentialSolution)
 	int rank, world_size;
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	std::mt19937 rng(42);
 	ASSERT_GE(world_size, 2);
 
 	boost::mpi::communicator comm;
 
 	// Random-ish test case with 6 items
-	const std::vector<int> weights{2, 3, 4, 5, 1, 3};
-	const std::vector<int> values{10, 15, 20, 25, 8, 12};
+	std::vector<int> weights(10);
+	std::vector<int> values(10);
 	constexpr int capacity = 12;
+	for(int i = 0; i < weights.size(); i++)
+	{
+		weights.push_back(rng()%100+1);
+		values.push_back(rng()%100+1);
+	}
 
 	auto mpi_result = knapsackcopampi(comm, weights, values, capacity);
 	auto seq_result = knapsackcopasequential(weights, values, capacity);

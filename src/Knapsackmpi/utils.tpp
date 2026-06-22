@@ -172,7 +172,7 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 			broadcast(comm, shifted, 0);
 			mpi_parallel_merge(comm, subsets, shifted, newSubsets);
 		}
-		subsets = std::move(newSubsets);
+		subsets = prune_dominated_subsets(newSubsets);
 	}
 	if (reverse)
 		std::ranges::reverse(subsets);
