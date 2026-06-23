@@ -13,10 +13,7 @@ std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &w
 	auto A = generate_copa_subsets(Alist);
 	auto B = generate_copa_subsets(Blist, 1, true);
 
-	auto N = A.size();
-	if (N == 0 || B.size() != N)
-		return std::nullopt;
-
+	auto N = static_cast<int>(B.size());
 	// Step 1: Compute suffix max for B (MaxBj and Lj)
 	std::vector<int> MaxB(N);
 	std::vector<int> L(N);
@@ -42,7 +39,7 @@ std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &w
 	std::pair<int, int> X1{0, 0};
 
 	int i = 0, j = 0;
-	while (i < static_cast<int>(N) && j < static_cast<int>(N))
+	while (i < static_cast<int>(A.size()) && j < static_cast<int>(N))
 	{
 		if (A[i].totalWeight + B[j].totalWeight > capacity)
 		{
@@ -85,7 +82,7 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	auto A = generate_copa_subsets(Alist, numThreads);
 	auto B = generate_copa_subsets(Blist, numThreads, true); 
 
-	int N = static_cast<int>(A.size());
+	int N = static_cast<int>(B.size());
 	// Stage 2 : Parallel suffix max for B (MaxBj and Lj)
 	std::vector<CopaBlock> blocksA(numThreads);
 	std::vector<CopaBlock> blocksB(numThreads);
@@ -128,7 +125,7 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 
 		// Two-pointer search over full arrays
 		int i = 0, j = 0;
-		while (i < static_cast<int>(N) && j < static_cast<int>(N))
+		while (i < static_cast<int>(A.size()) && j < static_cast<int>(N))
 		{
 			if (A[i].totalWeight + B[j].totalWeight > capacity)
 			{

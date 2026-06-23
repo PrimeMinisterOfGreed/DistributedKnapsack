@@ -52,7 +52,9 @@ int main(int argc, char **argv)
 	MPI_Errhandler errhandler;
 	MPI_Comm_create_errhandler(reinterpret_cast<MPI_Comm_errhandler_function *>(mpi_errhandler), &errhandler);
 	MPI_Comm_set_errhandler(MPI_COMM_WORLD, errhandler);
-
+	
+	spdlog::set_level(spdlog::level::trace);
+	spdlog::debug("MPI initialized. Running tests...");
 	testing::InitGoogleTest(&argc, argv);
 	auto res = RUN_ALL_TESTS();
 	MPI_Finalize();

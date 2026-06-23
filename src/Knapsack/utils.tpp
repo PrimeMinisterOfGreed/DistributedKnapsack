@@ -247,7 +247,7 @@ constexpr void prune_block_pair(const CopaBlock &blockA, const CopaBlockInputRan
 			{
 				best_value = blockA.maxValue + blockB.maxValue;
 			}
-			// Prune block pair (Ai, B_{j mod k})
+			remaining.emplace_back(blockA, blockB);
 		}
 		else if (Z <= capacity && Y > capacity)
 		{

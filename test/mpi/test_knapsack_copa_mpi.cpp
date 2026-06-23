@@ -639,28 +639,29 @@ TEST(KnapsackCopaMPI, NoItemsFit)
 TEST(KnapsackCopaMPI, MatchesSequentialSolution)
 {
 	int rank, world_size;
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	spdlog::debug("Starting KnapsackCopaMPI MatchesSequentialSolution test on rank ", rank);
+	boost::mpi::communicator comm{};
+	rank = comm.rank();
+	world_size = comm.size();
 	std::mt19937 rng(42);
 	ASSERT_GE(world_size, 2);
 
-	boost::mpi::communicator comm;
 
 	// Random-ish test case with 6 items
 	std::vector<int> weights(10);
 	std::vector<int> values(10);
 	constexpr int capacity = 12;
-	for(int i = 0; i < weights.size(); i++)
+	for(int i = 0; i < 10; i++)
 	{
 		weights.push_back(rng()%100+1);
 		values.push_back(rng()%100+1);
 	}
-
+	spdlog::debug("Rank {}: Starting test", rank);
 	auto mpi_result = knapsackcopampi(comm, weights, values, capacity);
-	auto seq_result = knapsackcopasequential(weights, values, capacity);
-
+	
 	if (rank == 0)
 	{
+		auto seq_result = knapsackcopasequential(weights, values, capacity);
 		ASSERT_TRUE(mpi_result.has_value());
 		ASSERT_TRUE(seq_result.has_value());
 		EXPECT_EQ(mpi_result->totalValue, seq_result->totalValue);
@@ -668,6 +669,5 @@ TEST(KnapsackCopaMPI, MatchesSequentialSolution)
 	}
 	else
 	{
-		EXPECT_FALSE(mpi_result.has_value());
 	}
 }

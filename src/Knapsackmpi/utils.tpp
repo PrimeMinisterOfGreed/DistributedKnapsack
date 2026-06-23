@@ -138,7 +138,7 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 			int local_size = static_cast<int>(shifted.size()) / comm.size();
 			int remainder = static_cast<int>(shifted.size()) % comm.size();
 			auto procedure = compute_scatter_procedure(comm, shifted);
-			std::vector<CopaSubset> local_shifted{static_cast<size_t>(local_size), CopaSubset{}};
+			std::vector<CopaSubset> local_shifted{static_cast<size_t>(procedure.sizes[comm.rank()]), CopaSubset{}};
 			scatterv(comm, shifted.data(), procedure.sizes, procedure.displacements, local_shifted.data(),
 					 procedure.sizes[comm.rank()], 0);
 
@@ -172,6 +172,7 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 			broadcast(comm, shifted, 0);
 			mpi_parallel_merge(comm, subsets, shifted, newSubsets);
 		}
+		spdlog::debug("Rank {}: After merging item {}, new subset size: {}", comm.rank(), item_idx, newSubsets.size());
 		subsets = prune_dominated_subsets(newSubsets);
 	}
 	if (reverse)
@@ -243,7 +244,7 @@ constexpr void mpi_prune(communicator &comm, const CopaBlock &blockA, const Copa
 			{
 				best_value = blockA.maxValue + blockB.maxValue;
 			}
-			// Prune block pair (Ai, B_{j mod k})
+			blocks.emplace_back(blockA, blockB);
 		}
 		else if (Z <= capacity && Y > capacity)
 		{
