@@ -156,9 +156,9 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 		item_idx++;
 
 		std::vector<CopaSubset> newSubsets;
-		newSubsets.reserve(subsets.size() + shifted.size());
 		if (subsets.size() < 100 * comm.size())
 		{
+			newSubsets.resize(subsets.size() + shifted.size());
 			parallel_merge(subsets, shifted, newSubsets, 1);
 		}
 		else
@@ -170,6 +170,7 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 			}
 			broadcast(comm, subsets, 0);
 			broadcast(comm, shifted, 0);
+			newSubsets.resize(subsets.size() + shifted.size());
 			mpi_parallel_merge(comm, subsets, shifted, newSubsets);
 		}
 		spdlog::debug("Rank {}: After merging item {}, new subset size: {}", comm.rank(), item_idx, newSubsets.size());
@@ -184,39 +185,42 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 
 #pragma region Optimizers
 
-constexpr void mpi_distribute_block_per_process(communicator &comm, const CopaRange auto &input, CopaBlock &output)
+struct CopaDistributionIndex
+{
+	int start;
+	int end;
+	int maxValue;
+
+	template<typename Archive>
+	void serialize(Archive &ar, const unsigned int version)
+	{
+		ar & start;
+		ar & end;
+		ar & maxValue;
+	}
+};
+
+constexpr CopaDistributionIndex mpi_distribute_block_per_process(communicator &comm, const CopaRange auto &input)
 {
 	using value_type = std::ranges::range_value_t<decltype(input)>;
+	// calculate the size of the blocks for the thread
 	int n = static_cast<int>(std::ranges::size(input));
 	int k = comm.size();
-	if (k > n)
-		k = n;
-
-	if (n == 0)
-		return;
+	int i = comm.rank();
 
 	int block_size = n / k;
 	int remainder = n % k;
 
-	std::vector<int> sizes(k);
-	std::vector<int> displacements(k);
-	for (int i = 0; i < k; ++i)
-	{
-		sizes[i] = block_size + (i < remainder ? 1 : 0);
-		displacements[i] = block_size * i + std::min(i, remainder);
-	}
-
-	int rank = comm.rank();
-	std::vector<value_type> local_data(sizes[rank]);
-	scatterv(comm, std::ranges::data(input), sizes, displacements, local_data.data(), sizes[rank], 0);
-
+	int start = i * block_size + std::min(i, remainder);
+	int end = start + block_size + (i < remainder ? 1 : 0);
+	auto span = std::ranges::subrange(std::ranges::begin(input) + start, std::ranges::begin(input) + end);
 	int max_val = 0;
-	for (const auto &elem : local_data)
+	for (const auto &elem : span)
 	{
 		if (elem.totalValue > max_val)
 			max_val = elem.totalValue;
 	}
-	output = {std::span<const CopaSubset>(local_data), max_val};
+	return {start, end, max_val};
 }
 
 constexpr void mpi_prune(communicator &comm, const CopaBlock &blockA, const CopaBlockInputRange auto &blocksB,

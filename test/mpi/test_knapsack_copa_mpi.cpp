@@ -322,8 +322,13 @@ TEST(MpiDistributeBlock, BasicDistribution)
 	}
 	broadcast(comm, input, 0);
 
-	CopaBlock local_block{{}, 0};
-	mpi_distribute_block_per_process(comm, input, local_block);
+	// New API: mpi_distribute_block_per_process returns CopaDistributionIndex
+	auto desc = mpi_distribute_block_per_process(comm, input);
+
+	// Construct CopaBlock from the descriptor
+	CopaBlock local_block;
+	local_block.block = std::span(input).subspan(desc.start, desc.end - desc.start);
+	local_block.maxValue = desc.maxValue;
 
 	std::vector<int> values;
 	for (auto &s : input)
@@ -352,8 +357,13 @@ TEST(MpiDistributeBlock, UnevenDistribution)
 	}
 	broadcast(comm, input, 0);
 
-	CopaBlock local_block{{}, 0};
-	mpi_distribute_block_per_process(comm, input, local_block);
+	// New API: mpi_distribute_block_per_process returns CopaDistributionIndex
+	auto desc = mpi_distribute_block_per_process(comm, input);
+
+	// Construct CopaBlock from the descriptor
+	CopaBlock local_block;
+	local_block.block = std::span(input).subspan(desc.start, desc.end - desc.start);
+	local_block.maxValue = desc.maxValue;
 
 	std::vector<int> values;
 	for (auto &s : input)
@@ -386,8 +396,13 @@ TEST(MpiDistributeBlock, MaxValueCorrectlyComputed)
 	}
 	broadcast(comm, input, 0);
 
-	CopaBlock local_block{{}, 0};
-	mpi_distribute_block_per_process(comm, input, local_block);
+	// New API: mpi_distribute_block_per_process returns CopaDistributionIndex
+	auto desc = mpi_distribute_block_per_process(comm, input);
+
+	// Construct CopaBlock from the descriptor
+	CopaBlock local_block;
+	local_block.block = std::span(input).subspan(desc.start, desc.end - desc.start);
+	local_block.maxValue = desc.maxValue;
 
 	int expected_max;
 	if (rank == 0)
@@ -651,7 +666,7 @@ TEST(KnapsackCopaMPI, MatchesSequentialSolution)
 	std::vector<int> weights(10);
 	std::vector<int> values(10);
 	constexpr int capacity = 12;
-	for(int i = 0; i < 10; i++)
+	for(int i = 0; i < 100; i++)
 	{
 		weights.push_back(rng()%100+1);
 		values.push_back(rng()%100+1);
