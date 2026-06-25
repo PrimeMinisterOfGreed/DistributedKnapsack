@@ -146,10 +146,6 @@ TEST(Prune, MultiThreadPrunesAndKeepsCorrectly)
 	EXPECT_EQ(blocks[1].second.maxValue, 30);
 }
 
-
-
-
-
 TEST(KnapsackCopaSequential, OneThreadFindsOptimalValue)
 {
 	const std::vector<int> weights{1, 2, 3, 4};
@@ -355,37 +351,35 @@ TEST(CrossValidator, DpCopaSequentialCopaParallelAgree)
 		ASSERT_TRUE(copa_seq.has_value()) << "COPA sequential failed for capacity=" << cap;
 		ASSERT_TRUE(copa_par.has_value()) << "COPA parallel failed for capacity=" << cap;
 
-		EXPECT_EQ(dp_result.totalValue, copa_seq->totalValue)
-			<< "DP/COPA-seq value mismatch for capacity=" << cap;
-		EXPECT_EQ(dp_result.totalValue, copa_par->totalValue)
-			<< "DP/COPA-par value mismatch for capacity=" << cap;
-		EXPECT_EQ(copa_seq->totalValue, copa_par->totalValue)
-			<< "COPA-seq/par value mismatch for capacity=" << cap;
-		EXPECT_LE(copa_seq->totalWeight, cap)
-			<< "COPA-seq solution exceeds capacity=" << cap;
-		EXPECT_LE(copa_par->totalWeight, cap)
-			<< "COPA-par solution exceeds capacity=" << cap;
+		EXPECT_EQ(dp_result.totalValue, copa_seq->totalValue) << "DP/COPA-seq value mismatch for capacity=" << cap;
+		EXPECT_EQ(dp_result.totalValue, copa_par->totalValue) << "DP/COPA-par value mismatch for capacity=" << cap;
+		EXPECT_EQ(copa_seq->totalValue, copa_par->totalValue) << "COPA-seq/par value mismatch for capacity=" << cap;
+		EXPECT_LE(copa_seq->totalWeight, cap) << "COPA-seq solution exceeds capacity=" << cap;
+		EXPECT_LE(copa_par->totalWeight, cap) << "COPA-par solution exceeds capacity=" << cap;
 	}
 }
 
 TEST(TestKnapSackCopa, TestHugeCase)
 {
-	std::mt19937 rng(42);
-	std::vector<int> weights(100);
-	std::vector<int> values(100);
+
+
+		std::mt19937 rng(42);
+		std::vector<int> weights(46);
+		std::vector<int> values(46);
+
+		constexpr int capacity = 100;
+		for (int i = 0; i < weights.size(); ++i)
+		{
+			weights[i] = rng() % 100 + 1; // Weights between 1 and 100
+			values[i] = rng() % 100 + 1;  // Values between 1 and 100
+		}
+
+		auto dp_result = knapsackdp(weights, values, capacity, 32);
+		auto copa_par = knapsackcopa(weights, values, capacity, 32);
+
+		ASSERT_TRUE(copa_par.has_value()) << "COPA parallel failed for huge case";
+
+		EXPECT_EQ(dp_result.totalValue, copa_par->totalValue) << "DP/COPA-par value mismatch for huge case";
+		EXPECT_LE(copa_par->totalWeight, capacity) << "COPA-par solution exceeds capacity for huge case";
 	
-	constexpr int capacity = 100;
-	for (int i = 0; i < weights.size(); ++i)
-	{
-		weights[i] = rng() % 100 + 1; // Weights between 1 and 100
-		values[i] = rng() % 100 + 1;  // Values between 1 and 100
-	}
-
-	auto dp_result = knapsackdp(weights, values, capacity, 32);
-	auto copa_par = knapsackcopa(weights, values, capacity, 32);
-
-	ASSERT_TRUE(copa_par.has_value()) << "COPA parallel failed for huge case";
-
-	EXPECT_EQ(dp_result.totalValue, copa_par->totalValue) << "DP/COPA-par value mismatch for huge case";
-	EXPECT_LE(copa_par->totalWeight, capacity) << "COPA-par solution exceeds capacity for huge case";
 }

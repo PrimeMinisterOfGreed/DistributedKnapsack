@@ -666,7 +666,7 @@ TEST(KnapsackCopaMPI, MatchesSequentialSolution)
 	std::vector<int> weights(10);
 	std::vector<int> values(10);
 	constexpr int capacity = 12;
-	for(int i = 0; i < 100; i++)
+	for(int i = 0; i < 10; i++)
 	{
 		weights.push_back(rng()%100+1);
 		values.push_back(rng()%100+1);

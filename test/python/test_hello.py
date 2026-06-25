@@ -12,16 +12,18 @@ def test_hello():
 
 def test_knapsackdp():
     random.seed(42)
-    weights = [random.randint(1, 100) for x in range(1, 100)]
-    values = [random.randint(1, 100) for x in range(1, 100)]
+    weights = [random.randint(1, 100) for x in range(1000)]
+    values = [random.randint(1, 100) for x in range(1000)]
     capacity = random.randint(1, 1000)
     args = lib.KnapsackArguments(weights, values, capacity)
     result = lib.knapsackdp(args,1)
     print(f"Knapsack result: {result.totalValue}, Total Weight: {result.totalWeight}")
     result_copa = lib.knapsackcopa(args,16)
     print(f"Knapsack COPA result: {result_copa.totalValue}, Total Weight: {result_copa.totalWeight}")
-    result_copa_seq = lib.knapsackcopasequential(args)
-    print(f"Knapsack COPA Sequential result: {result_copa_seq.totalValue}, Total Weight: {result_copa_seq.totalWeight}")
+   #result_copa_seq = lib.knapsackcopasequential(args)
+    #print(f"Knapsack COPA Sequential result: {result_copa_seq.totalValue}, Total Weight: {result_copa_seq.totalWeight}")
+    result_mpi = lib.knapsackcopampi(args)
+    print(f"Knapsack MPI result: {result_mpi.totalValue}, Total Weight: {result_mpi.totalWeight}")
 
 if __name__ == "__main__":
     test_hello()

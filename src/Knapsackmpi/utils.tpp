@@ -174,7 +174,7 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 			mpi_parallel_merge(comm, subsets, shifted, newSubsets);
 		}
 		spdlog::debug("Rank {}: After merging item {}, new subset size: {}", comm.rank(), item_idx, newSubsets.size());
-		subsets = prune_dominated_subsets(newSubsets);
+		subsets = std::move(newSubsets);
 	}
 	if (reverse)
 		std::ranges::reverse(subsets);

@@ -162,7 +162,7 @@ std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r,
 		merged.resize(subsets.size() + shifted.size());
 
 		parallel_merge(subsets, shifted, merged, numthreads);
-		subsets = prune_dominated_subsets(merged);
+		subsets = std::move(merged);
 	}
 
 	if (reverseorder)

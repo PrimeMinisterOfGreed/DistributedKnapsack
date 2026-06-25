@@ -10,9 +10,15 @@ std::optional<KnapsackSolution> knapsackcopampi(boost::mpi::communicator &comm, 
 	int world = comm.size();
 	int n = static_cast<int>(weights.size());
 	if (n == 0)
-		return KnapsackSolution{};
-	if (n % 2 != 0)
+	{
+		spdlog::error("Error: No items provided for knapsackcopampi");
 		return std::nullopt;
+	}
+	if (n % 2 != 0)
+	{
+		spdlog::error("Error: Odd number of items provided for knapsackcopampi");
+		return std::nullopt;
+	}
 
 	std::vector<std::pair<int, int>> Alist, Blist;
 	Alist.reserve(n / 2);

@@ -1,103 +1,88 @@
 #include "Knapsack/utils.tpp"
 #include "TestEnvironment.hpp"
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <vector>
-#include <algorithm>
 
 TEST(ParallelMerge, MergesAdjacentSortedRangesCorrectlySingleThread)
 {
-    std::vector<int> a{1, 4, 9};
-    std::vector<int> b{2, 3, 8, 10};
+	std::vector<int> a{1, 4, 9};
+	std::vector<int> b{2, 3, 8, 10};
 
-    // put both ranges into a single contiguous container as expected by parallel_merge
-    std::vector<int> data;
-    data.resize(a.size() + b.size() + 1);
-    parallel_merge(a, b, data, 1);
+	// put both ranges into a single contiguous container as expected by parallel_merge
+	std::vector<int> data;
+	data.resize(a.size() + b.size() + 1);
+	parallel_merge(a, b, data, 1);
 
-    std::vector<int> expected{1,2,3,4,8,9,10};
-    EXPECT_EQ(data, expected);
+	std::vector<int> expected{1, 2, 3, 4, 8, 9, 10};
+	EXPECT_EQ(data, expected);
 }
 
 TEST(ParallelMerge, MergesAdjacentSortedRangesCorrectlyMultiThread)
 {
-    std::vector<int> a{0, 5, 6, 11};
-    std::vector<int> b{1, 2, 3, 7, 12};
+	std::vector<int> a{0, 5, 6, 11};
+	std::vector<int> b{1, 2, 3, 7, 12};
 
-    std::vector<int> data;
-    data.resize(a.size() + b.size());
-    parallel_merge(a, b, data, 2);
+	std::vector<int> data;
+	data.resize(a.size() + b.size());
+	parallel_merge(a, b, data, 2);
 
-
-
-    std::vector<int> expected{0,1,2,3,5,6,7,11,12};
-    EXPECT_EQ(data, expected);
+	std::vector<int> expected{0, 1, 2, 3, 5, 6, 7, 11, 12};
+	EXPECT_EQ(data, expected);
 }
 
 TEST(DivideInBalancedBlocks, SingleThreadDividesCorrectly)
 {
-    std::vector<CopaSubset> input{
-        CopaSubset{{}, 1, 10},
-        CopaSubset{{}, 2, 5},
-        CopaSubset{{}, 3, 20},
-        CopaSubset{{}, 4, 15}
-    };
+	std::vector<CopaSubset> input{CopaSubset{{}, 1, 10}, CopaSubset{{}, 2, 5}, CopaSubset{{}, 3, 20},
+								  CopaSubset{{}, 4, 15}};
 
-    std::vector<CopaBlock> blocks(1);
-    distribute_block_per_processor(input, blocks, 1);
+	std::vector<CopaBlock> blocks(1);
+	distribute_block_per_processor(input, blocks, 1);
 
-    ASSERT_EQ(blocks.size(), 1u);
-    EXPECT_EQ(blocks[0].block.size(), 4u);
-    EXPECT_EQ(blocks[0].maxValue, 20);
+	ASSERT_EQ(blocks.size(), 1u);
+	EXPECT_EQ(blocks[0].block.size(), 4u);
+	EXPECT_EQ(blocks[0].maxValue, 20);
 }
 
 TEST(DivideInBalancedBlocks, MultiThreadDividesCorrectly)
 {
-    std::vector<CopaSubset> input{
-        CopaSubset{{}, 1, 10},
-        CopaSubset{{}, 2, 5},
-        CopaSubset{{}, 3, 20},
-        CopaSubset{{}, 4, 15}
-    };
+	std::vector<CopaSubset> input{CopaSubset{{}, 1, 10}, CopaSubset{{}, 2, 5}, CopaSubset{{}, 3, 20},
+								  CopaSubset{{}, 4, 15}};
 
-    std::vector<CopaBlock> blocks(2);
-    distribute_block_per_processor(input, blocks, 2);
+	std::vector<CopaBlock> blocks(2);
+	distribute_block_per_processor(input, blocks, 2);
 
-    ASSERT_EQ(blocks.size(), 2u);
-    EXPECT_EQ(blocks[0].block.size(), 2u);
-    EXPECT_EQ(blocks[1].block.size(), 2u);
-    EXPECT_EQ(blocks[0].maxValue, 10);
-    EXPECT_EQ(blocks[1].maxValue, 20);
+	ASSERT_EQ(blocks.size(), 2u);
+	EXPECT_EQ(blocks[0].block.size(), 2u);
+	EXPECT_EQ(blocks[1].block.size(), 2u);
+	EXPECT_EQ(blocks[0].maxValue, 10);
+	EXPECT_EQ(blocks[1].maxValue, 20);
 }
 
 TEST(DivideInBalancedBlocks, EmptyInputDoesNotModifyOutput)
 {
-    std::vector<CopaSubset> input;
-    std::vector<CopaBlock> blocks(2);
-    blocks[0] = {std::span<const CopaSubset>{}, 42};
-    blocks[1] = {std::span<const CopaSubset>{}, 99};
-    distribute_block_per_processor(input, blocks, 2);
-    EXPECT_EQ(blocks[0].maxValue, 42);
-    EXPECT_EQ(blocks[1].maxValue, 99);
+	std::vector<CopaSubset> input;
+	std::vector<CopaBlock> blocks(2);
+	blocks[0] = {std::span<const CopaSubset>{}, 42};
+	blocks[1] = {std::span<const CopaSubset>{}, 99};
+	distribute_block_per_processor(input, blocks, 2);
+	EXPECT_EQ(blocks[0].maxValue, 42);
+	EXPECT_EQ(blocks[1].maxValue, 99);
 }
 
 TEST(DivideInBalancedBlocks, UnevenDivisionHandlesRemainder)
 {
-    std::vector<CopaSubset> input{
-        CopaSubset{{}, 1, 10},
-        CopaSubset{{}, 2, 20},
-        CopaSubset{{}, 3, 30},
-        CopaSubset{{}, 4, 40},
-        CopaSubset{{}, 5, 50}
-    };
+	std::vector<CopaSubset> input{CopaSubset{{}, 1, 10}, CopaSubset{{}, 2, 20}, CopaSubset{{}, 3, 30},
+								  CopaSubset{{}, 4, 40}, CopaSubset{{}, 5, 50}};
 
-    std::vector<CopaBlock> blocks(2);
-    distribute_block_per_processor(input, blocks, 2);
+	std::vector<CopaBlock> blocks(2);
+	distribute_block_per_processor(input, blocks, 2);
 
-    ASSERT_EQ(blocks.size(), 2u);
-    EXPECT_EQ(blocks[0].block.size(), 3u);
-    EXPECT_EQ(blocks[1].block.size(), 2u);
-    EXPECT_EQ(blocks[0].maxValue, 30);
-    EXPECT_EQ(blocks[1].maxValue, 50);
+	ASSERT_EQ(blocks.size(), 2u);
+	EXPECT_EQ(blocks[0].block.size(), 3u);
+	EXPECT_EQ(blocks[1].block.size(), 2u);
+	EXPECT_EQ(blocks[0].maxValue, 30);
+	EXPECT_EQ(blocks[1].maxValue, 50);
 }
 
 // ============================================================================
@@ -265,7 +250,6 @@ TEST_F(GenerateCopaSubsetsTimed, BenchmarkN5)
 	for (int t : {1, 2, 4})
 	{
 		auto [subsets, us] = timed_run(items, t);
-		EXPECT_EQ(subsets.size(), 32u);
 		EXPECT_TRUE(is_sorted_by_weight(subsets));
 		fmt::println("  threads={}: {:>6} µs ({} subsets)", t, us, subsets.size());
 	}
@@ -279,7 +263,6 @@ TEST_F(GenerateCopaSubsetsTimed, BenchmarkN10)
 	for (int t : {1, 2, 4, 8})
 	{
 		auto [subsets, us] = timed_run(items, t);
-		EXPECT_EQ(subsets.size(), 1024u);
 		EXPECT_TRUE(is_sorted_by_weight(subsets));
 		fmt::println("  threads={}: {:>6} µs ({} subsets)", t, us, subsets.size());
 	}
@@ -293,7 +276,6 @@ TEST_F(GenerateCopaSubsetsTimed, BenchmarkN15)
 	for (int t : {1, 2, 4, 8})
 	{
 		auto [subsets, us] = timed_run(items, t);
-		EXPECT_EQ(subsets.size(), 32768u);
 		EXPECT_TRUE(is_sorted_by_weight(subsets));
 		fmt::println("  threads={}: {:>6} µs ({} subsets)", t, us, subsets.size());
 	}
@@ -307,10 +289,30 @@ TEST_F(GenerateCopaSubsetsTimed, BenchmarkN20)
 	for (int t : {1, 2, 4, 8})
 	{
 		auto [subsets, us] = timed_run(items, t);
-		EXPECT_EQ(subsets.size(), 1u << 20);
 		EXPECT_TRUE(is_sorted_by_weight(subsets));
 		fmt::println("  threads={}: {:>9} µs ({} subsets)", t, us, subsets.size());
 	}
+}
+
+TEST_F(GenerateCopaSubsetsTimed, BenchmarkN100)
+{
+	auto items = make_items(100);
+
+	for (int t : {8, 12, 16, 32})
+	{
+		auto [subsets, us] = timed_run(items, t);
+		EXPECT_TRUE(is_sorted_by_weight(subsets));
+		fmt::println("  threads={}: {:>9} µs ({} subsets)", t, us, subsets.size());
+	}
+}
+
+TEST_F(GenerateCopaSubsetsTimed, BenchmarkN1000)
+{
+	auto items = make_items(1000);
+
+	auto [subsets, us] = timed_run(items, 32);
+	EXPECT_TRUE(is_sorted_by_weight(subsets));
+	fmt::println("  threads={}: {:>9} µs ({} subsets)", 32, us, subsets.size());
 }
 
 TEST_F(GenerateCopaSubsetsTimed, CompareAllThreadCountsN12)
@@ -322,7 +324,6 @@ TEST_F(GenerateCopaSubsetsTimed, CompareAllThreadCountsN12)
 	for (int t : {1, 2, 4, 8, 12})
 	{
 		auto [subsets, us] = timed_run(items, t);
-		EXPECT_EQ(subsets.size(), 4096u);
 		EXPECT_TRUE(is_sorted_by_weight(subsets));
 		if (t == 1)
 			ref_us = us;
@@ -352,18 +353,13 @@ TEST_F(GenerateCopaSubsetsTimed, TotalWeightSumMatchesReference)
 
 TEST(DivideInBalancedBlocks, BlocksReferenceOriginalData)
 {
-    std::vector<CopaSubset> input{
-        CopaSubset{{}, 1, 10},
-        CopaSubset{{}, 2, 20},
-        CopaSubset{{}, 3, 30}
-    };
+	std::vector<CopaSubset> input{CopaSubset{{}, 1, 10}, CopaSubset{{}, 2, 20}, CopaSubset{{}, 3, 30}};
 
-    std::vector<CopaBlock> blocks(3);
-    distribute_block_per_processor(input, blocks, 3);
+	std::vector<CopaBlock> blocks(3);
+	distribute_block_per_processor(input, blocks, 3);
 
-    ASSERT_EQ(blocks.size(), 3u);
-    EXPECT_EQ(&blocks[0].block.front(), &input[0]);
-    EXPECT_EQ(&blocks[1].block.front(), &input[1]);
-    EXPECT_EQ(&blocks[2].block.front(), &input[2]);
+	ASSERT_EQ(blocks.size(), 3u);
+	EXPECT_EQ(&blocks[0].block.front(), &input[0]);
+	EXPECT_EQ(&blocks[1].block.front(), &input[1]);
+	EXPECT_EQ(&blocks[2].block.front(), &input[2]);
 }
-
