@@ -121,13 +121,14 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 	std::vector<CopaSubset> subsets{CopaSubset{}};
 	for (int item_idx = 0; const auto &item : items)
 	{
-		auto shifted = subsets;
+		decltype(subsets) shifted{subsets.size()};
 		auto [w, v] = item;
 		// For small subset sizes, do the shifting locally to avoid communication overhead
 		if (subsets.size() < 100 * comm.size())
 		{
 			for (int i = 0; i < static_cast<int>(shifted.size()); i++)
 			{
+				shifted[i] = subsets[i];
 				shifted[i].addItem(item_idx, w, v);
 			}
 		}
@@ -137,9 +138,11 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 			// For larger subset sizes, distribute the shifting across MPI processes
 			int local_size = static_cast<int>(shifted.size()) / comm.size();
 			int remainder = static_cast<int>(shifted.size()) % comm.size();
-			auto procedure = compute_scatter_procedure(comm, shifted);
+			auto procedure = compute_scatter_procedure(comm, subsets);
 			std::vector<CopaSubset> local_shifted{static_cast<size_t>(procedure.sizes[comm.rank()]), CopaSubset{}};
-			scatterv(comm, shifted.data(), procedure.sizes, procedure.displacements, local_shifted.data(),
+
+			// Distribute subsets to all processes for local shifting
+			scatterv(comm, subsets.data(), procedure.sizes, procedure.displacements, local_shifted.data(),
 					 procedure.sizes[comm.rank()], 0);
 
 			for (int i = 0; i < static_cast<int>(local_shifted.size()); i++)
@@ -147,11 +150,8 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 				local_shifted[i].addItem(item_idx, w, v);
 			}
 
-			// Gather the shifted subsets from all processes
-			std::vector<CopaSubset> global_shifted{shifted.size()};
-			gatherv(comm, local_shifted.data(), procedure.sizes[comm.rank()], global_shifted.data(), procedure.sizes,
+			gatherv(comm, local_shifted.data(), procedure.sizes[comm.rank()], shifted.data(), procedure.sizes,
 					procedure.displacements, 0);
-			shifted = std::move(global_shifted);
 		}
 		item_idx++;
 

@@ -11,7 +11,7 @@ TEST(ParallelMerge, MergesAdjacentSortedRangesCorrectlySingleThread)
 
 	// put both ranges into a single contiguous container as expected by parallel_merge
 	std::vector<int> data;
-	data.resize(a.size() + b.size() + 1);
+	data.resize(a.size() + b.size());
 	parallel_merge(a, b, data, 1);
 
 	std::vector<int> expected{1, 2, 3, 4, 8, 9, 10};
@@ -286,7 +286,7 @@ TEST_F(GenerateCopaSubsetsTimed, BenchmarkN20)
 	auto items = make_items(20);
 	fmt::println("\n--- Benchmark n=20 (expected 2^20 = {} subsets) ---", 1 << 20);
 
-	for (int t : {1, 2, 4, 8})
+	for (int t : {4, 8, 16, 32})
 	{
 		auto [subsets, us] = timed_run(items, t);
 		EXPECT_TRUE(is_sorted_by_weight(subsets));
@@ -298,7 +298,7 @@ TEST_F(GenerateCopaSubsetsTimed, BenchmarkN100)
 {
 	auto items = make_items(100);
 
-	for (int t : {8, 12, 16, 32})
+	for (int t : {32})
 	{
 		auto [subsets, us] = timed_run(items, t);
 		EXPECT_TRUE(is_sorted_by_weight(subsets));

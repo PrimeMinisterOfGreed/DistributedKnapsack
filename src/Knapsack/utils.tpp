@@ -2,6 +2,7 @@
 #include "Knapsack/knapsackcopa.hpp"
 #include "concepts.tpp"
 #include "panic.hpp"
+#include "time.hpp"
 #include <algorithm>
 #include <iterator>
 #include <limits>
@@ -72,22 +73,29 @@ std::pair<int, int> co_rank(const CoRankOrderableRange auto &A, const CoRankOrde
 template <std::ranges::input_range Range, std::ranges::output_range<const typename Range::value_type> OutputRange>
 void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num_threads)
 {
+	constexpr int MIN_PARALLEL_SIZE = 1024;
 	using namespace std::ranges;
 	int total_size = static_cast<int>(A.size() + B.size());
 
-	if (num_threads <= 1 || total_size == 0)
+	if (total_size < MIN_PARALLEL_SIZE || num_threads <= 1)
 	{
 		std::merge(begin(A), end(A), begin(B), end(B), begin(output));
 		return;
 	}
 
+	std::vector<std::pair<int, int>> boundaries(num_threads + 1);
+	for (int t = 0; t <= num_threads; ++t)
+	{
+		int pos = t * total_size / num_threads;
+		boundaries[t] = co_rank(A, B, pos);
+	}
+
 #pragma omp parallel for num_threads(num_threads)
 	for (int t = 0; t < num_threads; ++t)
 	{
+		auto [a_start, b_start] = boundaries[t];
+		auto [a_end, b_end] = boundaries[t + 1];
 		int start = t * total_size / num_threads;
-		int end = (t + 1) * total_size / num_threads;
-		auto [a_start, b_start] = co_rank(A, B, start);
-		auto [a_end, b_end] = co_rank(A, B, end);
 		std::merge(begin(A) + a_start, begin(A) + a_end, begin(B) + b_start, begin(B) + b_end, begin(output) + start);
 	}
 }
@@ -146,22 +154,46 @@ inline std::vector<CopaSubset> prune_dominated_subsets(const std::vector<CopaSub
 std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r, int numthreads = 1,
 											  bool reverseorder = false)
 {
+	constexpr int MIN_PARALLEL_SIZE = 1024;
 	std::vector<CopaSubset> subsets{CopaSubset{}};
 	for (int item_idx = 0; auto &&item : r)
 	{
-		std::vector<CopaSubset> shifted = subsets;
+		std::vector<CopaSubset> shifted{subsets.size()};
 		auto [w, v] = item;
 
+		time_block("GenerateCopaSubset::AddItem", [&]() {
+			if (shifted.size() >= MIN_PARALLEL_SIZE && numthreads > 1)
+			{
 #pragma omp parallel for num_threads(numthreads)
-		for (int i = 0; i < static_cast<int>(shifted.size()); i++)
-		{
-			shifted[i].addItem(item_idx, w, v);
-		}
+				for (int i = 0; i < static_cast<int>(shifted.size()); i++)
+				{
+					shifted[i] = subsets[i];
+					shifted[i].addItem(item_idx, w, v);
+				}
+			}
+			else
+			{
+				for (int i = 0; i < static_cast<int>(shifted.size()); i++)
+				{
+					shifted[i].addItem(item_idx, w, v);
+				}
+			}
+		});
+
 		item_idx++;
 		std::vector<CopaSubset> merged;
 		merged.resize(subsets.size() + shifted.size());
+		time_block("GenerateCopaSubset::Merge", [&]() {
+			if (merged.size() >= MIN_PARALLEL_SIZE && numthreads > 1)
+			{
+				parallel_merge(subsets, shifted, merged, numthreads);
+			}
+			else
+			{
+				std::merge(subsets.begin(), subsets.end(), shifted.begin(), shifted.end(), merged.begin());
+			}
+		});
 
-		parallel_merge(subsets, shifted, merged, numthreads);
 		subsets = std::move(merged);
 	}
 

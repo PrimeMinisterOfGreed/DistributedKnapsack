@@ -1,10 +1,12 @@
 #pragma once
 #include <chrono>
+#include <future>
 #include <spdlog/spdlog.h>
 #ifndef ENABLE_TIMERS
-#define ENABLE_TIMERS 1
+#define ENABLE_TIMERS 0
 #endif
 #include <concepts>
+#include <thread>
 
 template<typename Func>
 concept VoidInvocable = std::invocable<Func> && std::same_as<std::invoke_result_t<Func>, void>;
@@ -43,4 +45,31 @@ static constexpr auto time_block(const char *label, const NonVoidInvocable auto 
     {
         return func();
     }
+}
+
+
+static constexpr std::thread async_time_block(const char *label, const VoidInvocable auto &&func)
+{
+    return std::thread([label, func = std::move(func)]() mutable {
+        time_block(label, func);
+    });
+}
+
+template<NonVoidInvocable Func>
+static constexpr std::pair<std::thread, std::promise<decltype(std::declval<Func>()())>> async_time_block(const char *label, const Func &func)
+{
+    std::promise<decltype(func())> promise;
+    auto future = promise.get_future();
+    std::thread t([label, func = std::move(func), promise = std::move(promise)]() mutable {
+        try
+        {
+            auto result = time_block(label, func);
+            promise.set_value(result);
+        }
+        catch (...)
+        {
+            promise.set_exception(std::current_exception());
+        }
+    });
+    return {std::move(t), std::move(promise)};
 }

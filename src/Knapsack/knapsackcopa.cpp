@@ -1,8 +1,8 @@
 #include "knapsackcopa.hpp"
+#include "time.hpp"
 #include "utils.tpp"
 #include <algorithm>
 #include <ranges>
-#include "time.hpp"
 
 std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &weights, const std::vector<int> &values,
 													   int capacity)
@@ -12,12 +12,8 @@ std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &w
 	auto Alist = take(list, list.size() / 2);
 	auto Blist = drop(list, list.size() / 2);
 
-	auto A = time_block("generate_copa_subsets(Alist)", [&]() {
-		return generate_copa_subsets(Alist, 1);
-	});
-	auto B = time_block("generate_copa_subsets(Blist)", [&]() {
-		return generate_copa_subsets(Blist, 1, true);
-	});
+	auto A = time_block("generate_copa_subsets(Alist)", [&]() { return generate_copa_subsets(Alist, 1); });
+	auto B = time_block("generate_copa_subsets(Blist)", [&]() { return generate_copa_subsets(Blist, 1, true); });
 
 	auto N = static_cast<int>(B.size());
 	// Step 1: Compute suffix max for B (MaxBj and Lj)
@@ -41,7 +37,6 @@ std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &w
 		}
 	});
 
-
 	// Step 2: Search for optimal solution
 	int bestValue = 0;
 	std::pair<int, int> X1{0, 0};
@@ -64,7 +59,6 @@ std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &w
 			i++;
 		}
 	});
-
 
 	// Step 3: Build solution
 	auto best = A[X1.first] << B[X1.second];
@@ -91,31 +85,36 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 
 	auto Alist = take(list, n / 2);
 	auto Blist = drop(list, n / 2);
-	
-	auto A = time_block("generate_copa_subsets(Alist)", [&]() {
-		return generate_copa_subsets(Alist, numThreads);
-	});
-	auto B = time_block("generate_copa_subsets(Blist)", [&]() {
-		return generate_copa_subsets(Blist, numThreads, true);
-	});
+	std::vector<CopaSubset> A, B;
+	{
+		std::thread tA{[&]() {
+			A = time_block("generate_copa_subsets(Alist)", [&]() { return generate_copa_subsets(Alist, numThreads); });
+		}};
 
+		std::thread tB{[&]() {
+			B = time_block("generate_copa_subsets(Blist)",
+						   [&]() { return generate_copa_subsets(Blist, numThreads, true); });
+		}};
+
+		tA.join();
+		tB.join();
+	}
 	int N = static_cast<int>(B.size());
 	// Stage 2 : Parallel suffix max for B (MaxBj and Lj)
 	std::vector<CopaBlock> blocksA(numThreads);
 	std::vector<CopaBlock> blocksB(numThreads);
 
-	time_block("distribute blocks for A", [&]() {
-		distribute_block_per_processor(A, blocksA, numThreads);
-	});
-	time_block("distribute blocks for B", [&]() {
-		distribute_block_per_processor(B, blocksB, numThreads);
-	});
+	{
+		std::thread tA{[&]() { distribute_block_per_processor(A, blocksA, numThreads); }};
 
+		std::thread tB{[&]() { distribute_block_per_processor(B, blocksB, numThreads); }};
+		tA.join();
+		tB.join();
+	}
+	
 	// Stage 3: Parallel pruning
 	std::vector<std::pair<CopaBlock, CopaBlock>> remainingPairs;
-	time_block("prune blocks", [&]() {
-		prune(blocksA, blocksB, remainingPairs, capacity, numThreads);
-	});
+	time_block("prune blocks", [&]() { prune(blocksA, blocksB, remainingPairs, capacity, numThreads); });
 
 	// Stages 4+5: For each remaining block pair, compute suffix max and search
 	int k = static_cast<int>(remainingPairs.size());
@@ -168,9 +167,8 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	std::vector<int> localBestAIdx(k, 0);
 	std::vector<int> localBestBIdx(k, 0);
 
-	time_block("parallel save max", [&]() {
-		parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k);
-	});
+	time_block("parallel save max",
+			   [&]() { parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k); });
 
 	// Reduce across all remaining pairs
 	for (int i = 0; i < k; ++i)
