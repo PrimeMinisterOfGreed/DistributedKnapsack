@@ -3,7 +3,6 @@ CompileFlags:
   Add:
     - -fopenmp
   Remove:
-    - -fmodules-ts
-    - -fmodule*
+    - -fmod*
     - -Wmodule*
     - -fdeps*

@@ -18,5 +18,6 @@
     "clangd.arguments": [
         "--header-insertion=never",
         "--query-driver=g++-15",
-    ]
+    ],
+    "clangd.path": "clangd-23"
 }

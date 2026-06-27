@@ -1,7 +1,10 @@
 {
-    "$schema": "https://opencode.ai/config.json",
-      "provider": {
-    "cluster": {
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "opencode-parser"
+  ],
+  "provider": {
+    "cefprovider": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "Cluster",
       "options": {
@@ -10,26 +13,23 @@
       "models": {
         "Qwen3.5": {
           "name": "Qwen3.5",
+          "reasoning": true,
+          "cost": {
+            "input": 0.40,
+            "output": 0.80
+          },
+          "limit": {
+            "context": 128000,
+            "output": 32000
+          },
           "options": {
-            "max_tokens": 32000
+            "max_tokens": 32000,
           }
         }
       }
     }
   },
-    "autoupdate": true,
-    "server": {
-        "port": 4096
-    },
-    "lsp": {
-        "clangd": {
-            "command": [
-                "clangd",
-                "--background-index",
-                "--clang-tidy",
-                "--completion-style=detailed",
-                "--header-insertion=never"
-            ],
-        }
-    }
+  "lsp": {
+   
+  }
 }
