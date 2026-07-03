@@ -83,59 +83,16 @@ void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num
 		return;
 	}
 
-	std::vector<std::pair<int, int>> boundaries(num_threads + 1);
-	for (int t = 0; t <= num_threads; ++t)
-	{
-		int pos = t * total_size / num_threads;
-		boundaries[t] = co_rank(A, B, pos);
-	}
-
 #pragma omp parallel for num_threads(num_threads)
 	for (int t = 0; t < num_threads; ++t)
 	{
-		auto [a_start, b_start] = boundaries[t];
-		auto [a_end, b_end] = boundaries[t + 1];
 		int start = t * total_size / num_threads;
+		int end = (t + 1) * total_size / num_threads;
+
+		auto [a_start, b_start] = co_rank(A, B, start);
+		auto [a_end, b_end] = co_rank(A, B, end);
 		std::merge(begin(A) + a_start, begin(A) + a_end, begin(B) + b_start, begin(B) + b_end, begin(output) + start);
 	}
-}
-
-/**
- * @brief Remove dominated subsets from a weight-sorted list (Pareto frontier).
- *
- * A subset A dominates B if A.totalWeight <= B.totalWeight and A.totalValue >= B.totalValue.
- * Since the input is sorted by weight ascending, a single forward pass suffices:
- * keep only entries with strictly increasing totalValue.
- *
- * @param input Weight-sorted vector of CopaSubset
- * @return Pareto-optimal frontier (non-dominated subsets only)
- */
-inline std::vector<CopaSubset> prune_dominated_subsets(const std::vector<CopaSubset> &input)
-{
-	if (input.empty())
-		return {};
-
-	std::vector<CopaSubset> result;
-	int max_value = std::numeric_limits<int>::min();
-	int last_weight = std::numeric_limits<int>::min();
-
-	for (const auto &s : input)
-	{
-		if (s.totalValue > max_value)
-		{
-			if (s.totalWeight == last_weight)
-			{
-				result.back() = s;
-			}
-			else
-			{
-				result.push_back(s);
-				last_weight = s.totalWeight;
-			}
-			max_value = s.totalValue;
-		}
-	}
-	return result;
 }
 
 /**
@@ -175,6 +132,7 @@ std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r,
 			{
 				for (int i = 0; i < static_cast<int>(shifted.size()); i++)
 				{
+					shifted[i] = subsets[i];
 					shifted[i].addItem(item_idx, w, v);
 				}
 			}
