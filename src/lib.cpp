@@ -33,6 +33,28 @@ KnapsackSolution knapsackdpsolver(KnapsackArguments args, int numThreads)
 	return knapsackdp(args.weights, args.values, args.capacity, numThreads);
 }
 
+KnapsackSolution knapsackdpmpisolver(KnapsackArguments args)
+{
+	MPI_Init(NULL, NULL);
+	auto comm = boost::mpi::communicator();
+	auto rank = comm.rank();
+	auto res = knapsackdpmpi(comm, args.weights, args.values, args.capacity);
+	MPI_Finalize();
+	if (res.has_value())
+		return res.value();
+	else if (!res.has_value() && rank!= 0)
+	{
+		std::cerr << "Error: no solution for non root node" << std::endl;
+		return KnapsackSolution();
+	}
+	else
+	{
+		std::cerr << "Error: No solution found by knapsackdpmpi" << std::endl;
+		return KnapsackSolution();
+	}
+}
+
+
 KnapsackSolution knapsackcopasolver(KnapsackArguments args, int numThreads)
 {
 	auto res = knapsackcopa(args.weights, args.values, args.capacity, numThreads);
@@ -61,10 +83,16 @@ KnapsackSolution knapsackcopampisolver(KnapsackArguments args, int numThreads)
 {
 	MPI_Init(NULL, NULL);
 	auto comm = boost::mpi::communicator();	
+	auto rank = comm.rank();
 	auto res = knapsackcopampi(comm,args.weights, args.values, args.capacity);
 	MPI_Finalize();
 	if (res.has_value())
 		return res.value();
+	else if(!res.has_value() && rank!= 0)
+	{
+		std::cerr << "Error: no solution for non root node" << std::endl;
+		return KnapsackSolution();
+	}
 	else
 	{
 		std::cerr << "Error: No solution found by knapsackcopampi" << std::endl;
@@ -92,4 +120,6 @@ BOOST_PYTHON_MODULE(libdistributed_knapsack)
 		(boost::python::arg("args")));
 	def("knapsackcopampi", knapsackcopampisolver,
 		(boost::python::arg("args"), boost::python::arg("numThreads") = 1));
+	def("knapsackdpmpi", knapsackdpmpisolver,
+		(boost::python::arg("args")));
 }
