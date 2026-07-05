@@ -16,7 +16,7 @@ target_sources(${UT_TARGET_NAME} PUBLIC
     FILES ${KP_MODULES}
 )
 target_include_directories(${UT_TARGET_NAME} PUBLIC ${TGT_INCLUDE_DIRS})
-target_link_libraries(${UT_TARGET_NAME} PUBLIC ${TGT_LIBRARIES} PRIVATE GTest::gtest GTest::gtest_main tasker fmt::fmt)
+target_link_libraries(${UT_TARGET_NAME} PUBLIC ${TGT_LIBRARIES} PRIVATE GTest::gtest GTest::gtest_main  fmt::fmt)
 
 add_test(
     NAME python_hello_test

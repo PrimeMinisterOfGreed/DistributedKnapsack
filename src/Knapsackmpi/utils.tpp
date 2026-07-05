@@ -4,6 +4,7 @@
 #include <boost/mpi/collectives.hpp>
 #include <fmt/core.h>
 #include <ranges>
+#include "collective.hpp"
 
 using communicator = boost::mpi::communicator;
 
@@ -135,6 +136,7 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 
 		else
 		{
+
 			// For larger subset sizes, distribute the shifting across MPI processes
 			int local_size = static_cast<int>(shifted.size()) / comm.size();
 			int remainder = static_cast<int>(shifted.size()) % comm.size();
