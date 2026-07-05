@@ -45,7 +45,7 @@ TEST_F(CollectiveApplyTest, SimpleApplyIdentity)
     for (int i = 0; i < n; ++i)
         input[i] = i;
 
-    collectives::apply(comm, input, [](int x) { return x; }, output);
+    collectives::apply(comm, input, [](int idx, int x) { return x; }, output);
 
     for (int i = 0; i < n; ++i)
         EXPECT_EQ(output[i], i) << "Mismatch at index " << i << " on rank " << rank;
@@ -62,7 +62,7 @@ TEST_F(CollectiveApplyTest, SimpleApplySquare)
     for (int i = 0; i < n; ++i)
         input[i] = i;
 
-    collectives::apply(comm, input, [](int x) { return x * x; }, output);
+    collectives::apply(comm, input, [](int idx, int x) { return x * x; }, output);
 
     for (int i = 0; i < n; ++i)
         EXPECT_EQ(output[i], i * i) << "Mismatch at index " << i << " on rank " << rank;
@@ -79,7 +79,7 @@ TEST_F(CollectiveApplyTest, SimpleApplyDouble)
     for (int i = 0; i < n; ++i)
         input[i] = i + 1;
 
-    collectives::apply(comm, input, [](int x) { return x * 2; }, output);
+    collectives::apply(comm, input, [](int idx, int x) { return x * 2; }, output);
 
     for (int i = 0; i < n; ++i)
         EXPECT_EQ(output[i], (i + 1) * 2) << "Mismatch at index " << i << " on rank " << rank;
@@ -96,7 +96,7 @@ TEST_F(CollectiveApplyTest, SimpleApplyStringConversion)
     for (int i = 0; i < n; ++i)
         input[i] = i * 10;
 
-    collectives::apply(comm, input, [](int x) { return std::to_string(x); }, output);
+    collectives::apply(comm, input, [](int idx, int x) { return std::to_string(x); }, output);
 
     for (int i = 0; i < n; ++i)
         EXPECT_EQ(output[i], std::to_string(i * 10))
@@ -114,7 +114,7 @@ TEST_F(CollectiveApplyTest, SimpleApplyModulo)
     for (int i = 0; i < n; ++i)
         input[i] = i;
 
-    collectives::apply(comm, input, [](int x) { return x % 3; }, output);
+    collectives::apply(comm, input, [](int idx, int x) { return x % 3; }, output);
 
     for (int i = 0; i < n; ++i)
         EXPECT_EQ(output[i], i % 3) << "Mismatch at index " << i << " on rank " << rank;
@@ -128,7 +128,7 @@ TEST_F(CollectiveApplyTest, SimpleApplyEmptyInput)
     std::vector<int> input;
     std::vector<int> output;
 
-    collectives::apply(comm, input, [](int x) { return x; }, output);
+    collectives::apply(comm, input, [](int idx, int x) { return x; }, output);
 
     EXPECT_TRUE(output.empty());
 }
@@ -144,7 +144,7 @@ TEST_F(CollectiveApplyTest, SimpleApplySingleElementPerRank)
     for (int i = 0; i < n; ++i)
         input[i] = 100 + i;
 
-    collectives::apply(comm, input, [](int x) { return x + 1; }, output);
+    collectives::apply(comm, input, [](int idx, int x) { return x + 1; }, output);
 
     for (int i = 0; i < n; ++i)
         EXPECT_EQ(output[i], 101 + i) << "Mismatch at index " << i << " on rank " << rank;
@@ -161,7 +161,7 @@ TEST_F(CollectiveApplyTest, SimpleApplySpanInput)
         input[i] = i;
 
     std::span<const int> input_span(input);
-    collectives::apply(comm, input_span, [](int x) { return x * 3; }, output);
+    collectives::apply(comm, input_span, [](int idx, int x) { return x * 3; }, output);
 
     for (int i = 0; i < static_cast<int>(output.size()); ++i)
         EXPECT_EQ(output[i], i * 3) << "Mismatch at index " << i << " on rank " << rank;
@@ -179,7 +179,7 @@ TEST_F(CollectiveApplyTest, SimpleApplyLambdaWithState)
         input[i] = i;
 
     int offset = 42;
-    collectives::apply(comm, input, [offset](int x) { return x + offset; }, output);
+    collectives::apply(comm, input, [offset](int idx, int x) { return x + offset; }, output);
 
     for (int i = 0; i < n; ++i)
         EXPECT_EQ(output[i], i + offset) << "Mismatch at index " << i << " on rank " << rank;
@@ -196,7 +196,7 @@ TEST_F(CollectiveApplyTest, SimpleApplyNegativeValues)
     for (int i = 0; i < n; ++i)
         input[i] = -(i + 1);
 
-    collectives::apply(comm, input, [](int x) { return x * x; }, output);
+    collectives::apply(comm, input, [](int idx, int x) { return x * x; }, output);
 
     for (int i = 0; i < n; ++i)
     {
@@ -214,7 +214,7 @@ TEST_F(CollectiveApplyTest, SimpleApplyConstantInput)
     std::vector<int> input(n, 7);
     std::vector<int> output(n, -1);
 
-    collectives::apply(comm, input, [](int x) { return x * 10; }, output);
+    collectives::apply(comm, input, [](int idx, int x) { return x * 10; }, output);
 
     for (int i = 0; i < n; ++i)
         EXPECT_EQ(output[i], 70) << "Mismatch at index " << i << " on rank " << rank;
@@ -255,7 +255,7 @@ TEST_F(CollectiveApplyMasterWorkerTest, IdentityLargeChunk)
     for (int i = 0; i < n; ++i)
         input[i] = i;
 
-    collectives::apply(comm, input, [](int x) { return x; }, output, 0, n);
+    collectives::apply(comm, input, [](int idx, int x) { return x; }, output, 0, n);
 
     if (rank == 0)
     {
@@ -269,13 +269,13 @@ TEST_F(CollectiveApplyMasterWorkerTest, IdentityLargeChunk)
 // -----------------------------------------------------------------------------
 TEST_F(CollectiveApplyMasterWorkerTest, SquareMediumChunk)
 {
-    int n = world_size * 4;
+    int n = world_size * 16;
     std::vector<int> input(n);
     std::vector<int> output(n, -1);
     for (int i = 0; i < n; ++i)
         input[i] = i;
 
-    collectives::apply(comm, input, [](int x) { return x * x; }, output, 0, world_size);
+    collectives::apply(comm, input, [](int idx, int x) { return x * x; }, output, 0, world_size);
 
     if (rank == 0)
     {
@@ -295,7 +295,7 @@ TEST_F(CollectiveApplyMasterWorkerTest, SingleElementChunks)
     for (int i = 0; i < n; ++i)
         input[i] = i;
 
-    collectives::apply(comm, input, [](int x) { return x + 10; }, output, 0, 1);
+    collectives::apply(comm, input, [](int idx, int x) { return x + 10; }, output, 0, 1);
 
     if (rank == 0)
     {
@@ -315,7 +315,7 @@ TEST_F(CollectiveApplyMasterWorkerTest, MultipleRounds)
     for (int i = 0; i < n; ++i)
         input[i] = i;
 
-    collectives::apply(comm, input, [](int x) { return x * 3; }, output, 0, world_size);
+    collectives::apply(comm, input, [](int idx, int x) { return x * 3; }, output, 0, world_size);
 
     if (rank == 0)
     {
@@ -335,7 +335,7 @@ TEST_F(CollectiveApplyMasterWorkerTest, StringConversion)
     for (int i = 0; i < n; ++i)
         input[i] = i;
 
-    collectives::apply(comm, input, [](int x) { return std::to_string(x * 2); }, output, 0, 2);
+    collectives::apply(comm, input, [](int idx, int x) { return std::to_string(x * 2); }, output, 0, 2);
 
     if (rank == 0)
     {
@@ -352,7 +352,7 @@ TEST_F(CollectiveApplyMasterWorkerTest, EmptyInput)
     std::vector<int> input;
     std::vector<int> output;
 
-    collectives::apply(comm, input, [](int x) { return x; }, output, 0, 1);
+    collectives::apply(comm, input, [](int idx, int x) { return x; }, output, 0, 1);
 
     EXPECT_TRUE(output.empty());
 }
@@ -368,7 +368,7 @@ TEST_F(CollectiveApplyMasterWorkerTest, ModuloOperation)
     for (int i = 0; i < n; ++i)
         input[i] = i;
 
-    collectives::apply(comm, input, [](int x) { return x % 7; }, output, 0, world_size);
+    collectives::apply(comm, input, [](int idx, int x) { return x % 7; }, output, 0, world_size);
 
     if (rank == 0)
     {
@@ -386,7 +386,7 @@ TEST_F(CollectiveApplyMasterWorkerTest, ConstantInput)
     std::vector<int> input(n, 42);
     std::vector<int> output(n, -1);
 
-    collectives::apply(comm, input, [](int x) { return x / 6; }, output, 0, world_size);
+    collectives::apply(comm, input, [](int idx, int x) { return x / 6; }, output, 0, world_size);
 
     if (rank == 0)
     {
@@ -407,7 +407,7 @@ TEST_F(CollectiveApplyMasterWorkerTest, LambdaWithState)
         input[i] = i;
 
     int factor = 5;
-    collectives::apply(comm, input, [factor](int x) { return x * factor; }, output, 0, world_size);
+    collectives::apply(comm, input, [factor](int idx, int x) { return x * factor; }, output, 0, world_size);
 
     if (rank == 0)
     {
@@ -427,7 +427,7 @@ TEST_F(CollectiveApplyMasterWorkerTest, NegativeValues)
     for (int i = 0; i < n; ++i)
         input[i] = -(i + 1);
 
-    collectives::apply(comm, input, [](int x) { return x * x; }, output, 0, world_size);
+    collectives::apply(comm, input, [](int idx, int x) { return x * x; }, output, 0, world_size);
 
     if (rank == 0)
     {

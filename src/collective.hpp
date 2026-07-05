@@ -48,8 +48,8 @@ enum class tags : int
 } // namespace details
 
 void apply(communicator &comm, const std::ranges::input_range auto &array,
-		   const std::invocable<decltype(array[0])> auto &func,
-		   std::ranges::output_range<decltype(func(array[0]))> auto &out)
+		   const std::invocable<int,decltype(array[0])> auto &func,
+		   std::ranges::output_range<decltype(func(0, array[0]))> auto &out)
 {
 	int world = comm.size();
 	int rank = comm.rank();
@@ -60,18 +60,17 @@ void apply(communicator &comm, const std::ranges::input_range auto &array,
 
 	for (int i = start; i < end; ++i)
 	{
-		out[i] = func(array[i]);
+		out[i] = func(i,array[i]);
 	}
 
-	// Gather results from all processes
-	boost::mpi::all_gather(comm, out.data() + start, end - start, out.data());
+	boost::mpi::gather(comm, out.data() + start, end - start, out.data(),0);
 }
 
 void apply(communicator &comm, const std::ranges::input_range auto &array,
-		   const std::invocable<decltype(array[0])> auto &func,
-		   std::ranges::output_range<decltype(func(array[0]))> auto &out, int root, int chunk_size)
+		   const std::invocable<int,decltype(array[0])> auto &func,
+		   std::ranges::output_range<decltype(func(0, array[0]))> auto &out, int root, int chunk_size)
 {
-    using value_type = decltype(func(array[0]));
+    using value_type = decltype(func(0, array[0]));
 	using namespace boost::mpi;
     using namespace details;
 	int n = static_cast<int>(array.size());
@@ -83,7 +82,7 @@ void apply(communicator &comm, const std::ranges::input_range auto &array,
 		if (world == 1)
 		{
 			for (int i = 0; i < n; ++i)
-				out[i] = func(array[i]);
+				out[i] = func(i, array[i]);
 			return;
 		}
 
@@ -107,14 +106,14 @@ void apply(communicator &comm, const std::ranges::input_range auto &array,
 		while (next_start < n)
 		{
 			NodeResponse<value_type> response;
-			comm.recv(MPI_ANY_SOURCE, static_cast<int>(tags::response), response);
+			auto status = comm.recv(MPI_ANY_SOURCE, static_cast<int>(tags::response), response);
 			std::copy(response.value.begin(), response.value.end(),
 			          out.begin() + response.start);
 
 			NodeTask task;
 			task.start = next_start;
 			task.end   = std::min(next_start + chunk_size, n);
-			comm.send<NodeTask>(response.start, static_cast<int>(tags::task), task);
+			comm.send<NodeTask>(status.source(), static_cast<int>(tags::task), task);
 			next_start = task.end;
 		}
 
@@ -122,13 +121,10 @@ void apply(communicator &comm, const std::ranges::input_range auto &array,
 		for (int i = 0; i < active_count; ++i)
 		{
 			NodeResponse<value_type> response;
-			comm.recv(MPI_ANY_SOURCE, static_cast<int>(tags::response), response);
+			auto status = comm.recv(MPI_ANY_SOURCE, static_cast<int>(tags::response), response);
 			std::copy(response.value.begin(), response.value.end(),
 			          out.begin() + response.start);
-			printf("Master received final response from worker %d for range [%d, %d)\n",
-			          response.start, response.end);
 		}
-
 		// ---- terminate all workers (including idle ones) ---------------
 		for (int i = 1; i < world; ++i)
 			comm.send(i, static_cast<int>(tags::terminate));
@@ -151,10 +147,13 @@ void apply(communicator &comm, const std::ranges::input_range auto &array,
             response.value.reserve(task.end - task.start);
             for (int i = task.start; i < task.end; ++i)
             {
-                response.value.push_back(func(array[i]));
+                response.value.push_back(func(i,array[i]));
             }
             comm.send<NodeResponse<value_type>>(root, static_cast<int>(tags::response), response);
         }
 	}
 }
+
+
+
 } // namespace collectives
