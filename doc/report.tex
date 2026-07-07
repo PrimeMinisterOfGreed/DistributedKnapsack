@@ -1,0 +1,413 @@
+\documentclass[11pt]{article}
+
+\usepackage{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{cite}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\geometry{margin=1in}
+
+
+
+\title{Knapsack distribuito: implementazione, comparazione e analisi}
+\author{Matteo Ielacqua}
+
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    breaklines=true,
+    showstringspaces=false,
+    numbers=left,
+    numberstyle=\tiny
+}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduzione}  
+L'algoritmo dello zaino è un noto problema di ottimizzazione. L'idea è che si ha a disposizione uno zaino 
+e diversi elementi ad ognuno dei quali è assegnato un peso e un profitto. L'obiettivo è di massimizzare il profitto mantenendo il peso
+totale degli elementi entro un limite prefissato. Nella versione detta 0/1, ogni elemento può essere preso una sola volta,
+il problema si pone quindi come  $$ max \sum v_ix_i $$
+dove $v_i$ è il profitto dell'oggetto i-esimo e $x_i$ rappresenta la scelta (1 se scelto 0 altrimenti), soggetto a 
+$$ \sum w_ix_i \leq W \land x_i \in \{0,1\} $$ 
+\\
+Le versioni più complete di questo problema prevedono che si possa scegliere lo stesso elemento più volte, sia con che senza limite superiore a queste scelte
+(rispettivamente Bounded o Unbounded). Esistono anche versioni più complesse, come lo zaino multidimensionale, dove non esiste un solo vincolo 
+(come nel caso più semplice il peso) ma esistono diversi vincoli da tenere in considerazione durante il calcolo. Questa classe di problemi gioca 
+un ruolo chiave in diversi campi molto delicati ad esempio nelle operazioni logistiche o nello scheduling di task satellitari, in cui infatti 
+stanno prendendo piede diverse soluzioni basate su euristiche.
+
+\subsection{Soluzioni per knapsack 0/1}
+Il problema è NP-completo, data una soluzione non esiste quindi un algoritmo che possa verificare se è ottima in tempo polinomiale.
+Esiste tuttavia una soluzione che lo risolve in tempo pseudo-polinomiale basata sulla programmazione dinamica. 
+La prima soluzione più semplice e meno ottimale ha complessità temporale $O(2^n)$ ed è basata su un albero decisionale esplorato ricorsivamente
+\begin{algorithm}[H]
+\caption{Knapsack 0/1 Ricorsivo}\label{alg:knapsack-rec}
+\begin{algorithmic}
+\Require $profits$, $weights$, $max\_weight$, $index$
+\Ensure Profitto massimo ottenibile
+\If{$index = 0$ \textbf{or} $max\_weight = 0$}
+    \State \Return $0$
+\EndIf
+\State $pick \gets 0$
+\If{$weights[index-1] \leq max\_weight$}
+    \State $pick \gets profits[index-1] + \Call{Knapsack}{max\_weight - weights[index-1],\, profits,\, weights,\, index-1}$
+\EndIf
+\State $not\_pick \gets \Call{Knapsack}{max\_weight,\, profits,\, weights,\, index-1}$
+\State \Return $\max(pick,\, not\_pick)$
+\end{algorithmic}
+\end{algorithm}
+
+
+Le altre due soluzioni sono basate sulla programmazione dinamica. 
+la prima usa un approccio top-down (memoization) proponendo sostanzialmente una naturale evoluzione dell'approccio precedente, 
+ha una complessità temporale e spaziale $O(n*W)$
+
+\begin{algorithm}[H]
+\caption{Knapsack 0/1 Top-Down (memoization)}\label{alg:knapsack-memo}
+\begin{algorithmic}
+\Require $profits$, $weights$, $max\_weight$, $index$, $table$
+\Ensure Profitto massimo ottenibile
+\If{$index = 0$ \textbf{or} $max\_weight = 0$}
+    \State \Return $0$
+\EndIf
+\If{$table[index][max\_weight] \neq -1$}
+    \State \Return $table[index][max\_weight]$
+\EndIf
+\State $pick \gets 0$
+\If{$weights[index-1] \leq max\_weight$}
+    \State $pick \gets profits[index-1] + \Call{Knapsack}{max\_weight - weights[index-1],\, profits,\, weights,\, index-1,\, table}$
+\EndIf
+\State $not\_pick \gets \Call{Knapsack}{max\_weight,\, profits,\, weights,\, index-1,\, table}$
+\State $table[index][max\_weight] \gets \max(pick,\, not\_pick)$
+\State \Return $table[index][max\_weight]$
+\end{algorithmic}
+\end{algorithm}
+
+la seconda è una versione bottom-up (tabulation) con la medesima complessità ma che evita la ricorsione
+\begin{algorithm}[H]
+\caption{Knapsack 0/1 Bottom-Up (tabulation)}\label{alg:knapsack-tab}
+\begin{algorithmic}
+\Require $profits$, $weights$, $max\_weight$, $len$
+\Ensure Profitto massimo ottenibile
+\State $table \gets \text{Matrix}(len+1,\ max\_weight+1)$
+\For{$i \gets 0$ \textbf{to} $len$}
+    \For{$j \gets 0$ \textbf{to} $max\_weight$}
+        \If{$i = 0$ \textbf{or} $j = 0$}
+            \State $table[i][j] \gets 0$
+        \Else
+            \State $pick \gets 0$
+            \If{$weights[i-1] \leq j$}
+                \State $pick \gets profits[i-1] + table[i-1][j - weights[i-1]]$
+            \EndIf
+            \State $not\_pick \gets table[i-1][j]$
+            \State $table[i][j] \gets \max(pick,\ not\_pick)$
+        \EndIf
+    \EndFor
+\EndFor
+\State \Return $table[len][max\_weight]$
+\end{algorithmic}
+\end{algorithm}
+
+Una soluzione più raffinata di questa prevede di usare solo l'ultima riga calcolata, in modo da ridurre la complessità spaziale a $O(W)$
+
+\begin{algorithm}[H]
+\caption{Knapsack 0/1 Bottom-Up (spazio ottimizzato)}\label{alg:knapsack-opt}
+\begin{algorithmic}
+\Require $profits$, $weights$, $max\_weight$, $len$
+\Ensure Profitto massimo ottenibile
+\State $table \gets \text{array}[0 \dots max\_weight]$ inizializzato a 0
+\For{$i \gets 1$ \textbf{to} $len$}
+    \For{$j \gets max\_weight$ \textbf{downto} $weights[i-1]$}
+        \State $table[j] \gets \max(table[j],\ table[j - weights[i-1]] + profits[i-1])$
+    \EndFor
+\EndFor
+\State \Return $table[max\_weight]$
+\end{algorithmic}
+\end{algorithm}
+
+Lo svantaggio principale delle soluzioni basate su programmazione dinamica è che non lavorano bene su casi in cui i pesi non sono interi
+(o non possiedono una differenza prefissata tra di loro). Lo stesso vale per l'approccio naive descritto nella prima soluzione.
+
+\subsection{Soluzione Greedy}
+La soluzione Greedy ha un indubbio vantaggio rispetto a tutte le altre, può scegliere anche frazioni di un oggetto, 
+l'idea è quella di prendere gli oggetti basandosi sul loro rapporto peso/valore, prendendoli in ordine decrescente di rapporto,
+finchè lo zaino non è pieno. Se un oggetto non è possibile prenderlo per intero allora si può prendere una sua frazione a seconda 
+della capacità rimanente. 
+
+\begin{algorithm}[H]
+\caption{Fractional Knapsack (Greedy)}\label{alg:fknapsack}
+\begin{algorithmic}
+\Require $profits$, $weights$, $max\_weight$, $len$
+\Ensure Profitto massimo ottenibile
+\State $items \gets \text{sort}(\text{zip}(profits, weights), \text{key} = \frac{profit}{weight} \text{ decrescente})$
+\State $profit \gets 0.0$
+\State $current\_capacity \gets max\_weight$
+\For{$i \gets 0$ \textbf{to} $len - 1$}
+    \If{$items[i].weight \leq current\_capacity$}
+        \State $profit \gets profit + items[i].profit$
+        \State $current\_capacity \gets current\_capacity - items[i].weight$
+    \Else
+        \State $profit \gets profit + \frac{items[i].profit}{items[i].weight} \times current\_capacity$
+        \State \textbf{break}
+    \EndIf
+\EndFor
+\State \Return $profit$
+\end{algorithmic}
+\end{algorithm}
+
+
+% \subsection{Branch and bound}
+% Il Knapsack Branch and Bound è l'algoritmo più adottato nei solver industriali. Presenta una complessità temporale $O(2^n)$ ma mantiene una 
+% complessità spaziale di $O(N)$ e può lavorare con frazioni di peso. 
+
+% \begin{verbatim}
+
+% define Node = {level, profit, weight}
+% define Item = {weight,profit}
+
+% define bound(upper_node,len,max_weight,nodes)
+% {
+%     if(upper_node.weight >= W)
+%     {
+%         return 0
+%     }
+%     profit_bound = upper_node.profit 
+%     j = upper_node.level + 1
+%     total_weight = upper_node.weight
+%     while(j < n and total_weight + nodes[j].weight <= max_weight)
+%     {
+%         total_weight += nodes[j].weight
+%         profit_bound += nodes[j].profit
+%         j += 1
+%     }
+%     if(j<n)
+%     {
+%         profit_bound += (max_weight - total_weight)*nodes[j].value/nodes[j].weight
+%     }
+%     return profit_bound
+% }
+
+% define Knapsack(max_weight, nodes, len)
+% {
+%     nodes = nodes.sort((a,b)=> (b.profit/b.weight) - (a.profit/a.weight))
+%     priority_queue = PriorityQueue()
+%     dummy = Node{-1,0,0}
+%     priority_queue.put(dummy)
+%     max_profit = 0
+%     while(not priority_queue.empty())
+%     {
+%         node = priority_queue.get()
+%         if(node.level == -1)
+%         {
+%             v = Node{0,0,0}
+%         }
+%         else if(node.level == len -1)
+%         {
+%             continue
+%         }
+%         else
+%         {
+%             //Nodo senza considerare il prossimo item 
+%             v = Node{node.level + 1, node.profit, node.weight}
+%         }
+%         v.weight += nodes[v.level].weight
+%         v.profit += nodes[v.level].value 
+        
+%         if(v.weight <= max_weight and v.profit > max_profit)
+%         {
+%             max_profit = v.profit
+%         }
+%         v_bound = bound(v,len,max_weight,nodes)
+
+
+%         if(v_bound > max_profit)
+%         {
+%             priority_queue.put(v)
+%         }
+
+%         //Nodo considerando il prossimo item ma senza aggiungerlo allo zaino 
+
+%         v = Node{node.level+1, node.profit, node.weight}
+%         v_bound = bound(v,len,max_weight,nodes)
+%         if(v_bound > max_profit)
+%         {
+%             priority_queue.put(v)
+%         }
+%     }
+%     return max_profit
+% }
+% \end{verbatim}
+
+\section{Soluzioni parallele al Knapsack 0/1}
+
+Le soluzioni a questo problema sono le più disparate e negli anni ne sono state scritte molte. In ambito aereospaziale il knapsack è usato sopratutto 
+per lo scheduling di task operativi satellitari \cite{surveymethods} in particolare per l'osservazione terrestre \cite{exactmethodphoto}.
+Un interessante modello di esecuzione è denominato COPA \cite{knapsackCopaSolution} e sviluppa un algoritmo parallelo cost optimal per 
+risolvere il problema sia su CPU con OpenMP che su GPU con CUDA, l'idea dietro quest'algoritmo è la seguente: 1) Si prende 
+l'array di oggetti V e lo si divide in 2 insiemi disgiunti. 2) Per il primo insieme si generano tutte le $N=2^{n/2}$ possibili 
+combinazioni $a_i$, si calcola di ogni sottoinsieme $a_i$ peso e profitto $w_i,p_i$ e si aggiunge questa tripletta in una lista 
+in ordine crescente. 3) Si esegue lo stesso con la seconda lista per ogni sottoinsieme $b_i$ e le triplette si mettono in una lista
+di ordine non crescente. In questo modo si è generata la lista A, per generare la lista B si riproducono gli step precedenti 
+semplicemente inserendo le triplette in una lista di ordine non crescente. A questo punto si può passare alla fase di ricerca
+che prenderà in input le due liste ordinate.
+
+\begin{algorithm}[H]
+\caption{Algoritmo di ricerca}\label{alg:cap}
+\begin{algorithmic}
+\Require Due liste ordinate $A$ e $B$
+\Ensure Soluzione finale $Bestvalue$ e $X$
+\State Inizializza $MaxB_N \gets b_N.p$, $L_N \gets N$, $Bestvalue \gets 0$, $X_1 \gets (0, 0)$
+\For{$i \gets N-1$ \textbf{downto} $1$}
+    \If{$b_i.p > MaxB_{i+1}$}
+        \State $MaxB_i \gets b_i.p$ \textbf{and} $L_i \gets i$
+    \Else
+        \State $MaxB_i \gets MaxB_{i+1}$ \textbf{and} $L_i \gets L_{i+1}$
+    \EndIf
+\EndFor
+\State $i \gets 1$ \textbf{and} $j \gets 1$
+\While{$i \leq N$ \textbf{and} $j \leq N$}
+    \If{$a_i.w + b_j.w > c$}
+        \State $j \gets j + 1$ \textbf{and continue}
+    \EndIf
+    \If{$a_i.p + MaxB_j > Bestvalue$}
+        \State $Bestvalue \gets a_i.p + MaxB_j$ \textbf{and} $X_1 \gets (a_i,\, b_{L_j})$
+    \EndIf
+    \State $i \gets i + 1$
+\EndWhile
+\State Converti le due componenti decimali di $X_1$ in due numeri binari: $X_1 \gets (binary_1,\, binary_2)$
+\State $X \gets \text{strcat}(binary_1,\, binary_2)$ \Comment{Concatena i due binari}
+\end{algorithmic}
+\end{algorithm}
+
+Questo modello di esecuzione si può vedere subito che si presta bene ad essere parallelizzato, sia nella parte di generazione 
+delle liste sia in quella poi di ricerca dell'ottimo.  
+
+\subsection{COPA: Cost Optimal Parallel Algorithm}
+L'algoritmo parallelo è stato pensato per essere risolto su un modello EREW (Exclusive Read, Exclusive Write) PRAM con shared memory e assume k processori accessibili. 
+L'algoritmo sfrutta prima un'algoritmo di generazione parallela delle liste A e B
+
+\begin{algorithm}[H]
+\caption{Algoritmo parallelo di generazione}\label{alg:parallel_gen}
+\begin{algorithmic}
+\Require Elementi $(v_i, v_i.w, v_i.p)$, $i = 1, 2, \ldots, n/2$
+\Ensure Lista ordinata $A_{n/2}$ (i.e. $A$)
+\State  $A_0 \gets [(0, 0, 0)]$ e $IC \gets 1$
+\For{$i \gets 0$ \textbf{to} $n/2 - 1$}
+    \State $v_{i+1} \gets IC$
+    \For{\textbf{all} $P_j$, $1 \leq j \leq k$, \textbf{in parallel}}
+        \State Genera nuova lista $A'_i$ aggiungendo la tripletta $(v_{i+1}, v_{i+1}.w, v_{i+1}.p)$ a tutti gli elementi della lista ordinata $A_i$
+        \State Chiama l'algoritmo di merge parallelo per unire $A_i$ e $A'_i$ in ordine non decrescente di peso, producendo la lista ordinata $A_{i+1}$
+    \EndFor
+    \State $IC \gets IC + 1$
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+l'algoritmo di merging parallelo si articola nel modo seguente: prende in input due vettori ordinati $U = (u_1, u_2, \ldots, u_m)$ e $V = (v_1, v_2, \ldots, v_m)$ e $k$ processori $P_1, P_2, \ldots, P_k$, con $1 \leq k \leq 2m$ potenza di 2, e produce un vettore ordinato di lunghezza $2m$ ottenuto dall'unione di $U$ e $V$.
+\begin{enumerate}
+    \item \textbf{Step 1:} I $k$ processori partizionano $U$ e $V$ in parallelo, ciascuno in $k$ sottovettori (che possono essere vuoti) $(U_1, U_2, \ldots, U_k)$ e $(V_1, V_2, \ldots, V_k)$ tali che: $|U_i| + |V_i| = 2m/k$ per $1 \leq i \leq k$, e i pesi di tutti gli elementi in $U_i$ e $V_i$ sono minori dei pesi di tutti gli elementi in $U_{i+1}$ e $V_{i+1}$, per $1 \leq i \leq k-1$.
+    \item \textbf{Step 2:} Il processore $P_i$ esegue il merge sequenziale di $U_i$ e $V_i$, per $1 \leq i \leq k$, in parallelo con gli altri processori.
+\end{enumerate}
+
+\begin{algorithm}[H]
+\caption{Search max-value}\label{alg:parallel_max}
+\begin{algorithmic}
+\Require Due liste ordinate $A$ e $B$
+\Ensure $MaxA$ e $MaxB$
+\State Dividi sia $A$ che $B$ uniformemente in $k$ blocchi
+\For{\textbf{all} $P_i$, $1 \leq i \leq k$, \textbf{in parallel}}
+    \State $MaxA_i \gets a_{i,1}.p$, \quad $MaxB_i \gets b_{i,1}.p$
+    \For{$j \gets 2$ \textbf{to} $e$}
+        \If{$a_{i,j}.p > MaxA_i$}
+            \State $MaxA_i \gets a_{i,j}.p$
+        \EndIf
+        \If{$b_{i,j}.p > MaxB_i$}
+            \State $MaxB_i \gets b_{i,j}.p$
+        \EndIf
+    \EndFor
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\section{Implementazione dell'esperimento}
+
+l'esperimento si divide in 4 parti distinte: 1) l'implementazione del algoritmo di risoluzione del knapsack con programmazione dinamica: questo metodo è quello più didattico e semplice da implementare, proprio per questo è usato come base per verificare la corretta implementazione negli unit test degli algoritmi successivi. 2) Implementazione dell'algoritmo con programmazione dinamica in MPI 3) Implementazione dell'algoritmo COPA sequenziale e parallelo in shared memory usando OpenMP. 4) Implementazione dell'algoritmo COPA distribuito usando MPI 
+
+\subsection{Implementazione del knapsack in dinamic programming}
+
+L'implementazione del knapsack in programmazione dinamica sequenziale è decisamente semplice sia nella versione sequenziale che parallela in shared memory: 
+\begin{verbatim}
+        int n = weights.size();
+    std::vector<std::vector<int>> dp(n + 1, std::vector<int>(capacity + 1, 0));
+
+    // Build the dp table
+    for (int i = 1; i <= n; ++i) {
+        #pragma omp parallel for num_threads(numThreads) // Adjust the number of threads as needed
+        for (int w = 0; w <= capacity; ++w) {
+            if (weights[i - 1] <= w) {
+                dp[i][w] = std::max(dp[i - 1][w], dp[i - 1][w - weights[i - 1]] + values[i - 1]);
+            } else {
+                dp[i][w] = dp[i - 1][w];
+            }
+        }
+    }
+\end{verbatim}
+
+Questo algoritmo ha una complessità di O(N*C) dove C è la capacità dello zaino, la parallelizzazione avviene scomponendo il ciclo for interno che scrive i valori nella tabella, non si può parallelizzare il ciclo for più esterno perchè per risolvere la linea successiva bisogna prima calcolare tutti i valori per quella precedente. 
+\\
+L'implementazione MPI dell'algoritmo è molto simile, l'approccio seguito è stato quello di assegnare la tabella a un master, che scompone la linea successiva da calcolare in task di una certa dimensione, i worker non dispongono dell'intera tabella ma solo della linea precedente per risparmiare memoria.
+
+\begin{algorithm}
+\caption{Worker}
+	int n = static_cast<int>(weights.size());
+	std::vector<uint32_t> prev;
+	for (int i = 1; i <= n; ++i)
+	{
+        broadcast(MPI_COMM_WORLD,prev,0); //broadcast the previous line from master
+        while(!terminate_sent_from_master)
+        {
+        NodeTask task = comm.recv(any_source,tag::task);
+    	for (int w = task.startIndex; w <= task.endIndex; ++w)
+			{
+				if (weights[i - 1] <= w)
+				{
+					line[w] = std::max(prev[w], prev[w - weights[i - 1]] + values[i - 1]);
+				}
+			}
+        comm.send(Response{task,line},0);
+        }
+    }
+\end{algorithm}
+
+\begin{algorithm}
+\caption{Master}
+
+\end{algorithm}
+
+
+\subsection{Knapsack COPA}
+
+\subsection{Knapsack COPA MPI}
+
+\section{Risultati}
+
+\subsection{Knapsack DP}
+
+\bibliographystyle{plain}
+\bibliography{biblio}
+
+\end{document}
+
+
+
