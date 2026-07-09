@@ -1,5 +1,4 @@
 #include "Knapsack/utils.tpp"
-#include "TestEnvironment.hpp"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <vector>

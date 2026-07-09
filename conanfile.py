@@ -6,6 +6,8 @@ class DistKnapsack(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     generators = "CMakeDeps"
 
+    
+
     def generate(self):
         tc = CMakeToolchain(self)
         tc.user_presets_path = "build/CMakeUserPresets.json"
@@ -16,9 +18,11 @@ class DistKnapsack(ConanFile):
             return
         self.requires("fmt/12.1.0")
         self.requires("spdlog/1.17.0")
-        if not Path("/usr/include/boost").exists():
-            self.requires("boost/1.89.0")
+
+
         pass
+
+
     def layout(self):
         cmake_layout(self)
         self.folders.build = "build"

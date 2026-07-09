@@ -1,12 +1,11 @@
 #include "Knapsack/knapsack.hpp"
 #include "Knapsack/knapsackcopa.hpp"
 #include "Knapsack/utils.tpp"
-#include "TestEnvironment.hpp"
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <random>
 #include <vector>
-
+#include <gtest/gtest.h>
 TEST(KnapsackDP, OneThreadFindsOptimalValue)
 {
 	const std::vector<int> weights{1, 2, 3, 4};
