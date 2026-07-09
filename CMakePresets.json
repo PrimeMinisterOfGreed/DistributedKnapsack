@@ -29,6 +29,14 @@
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
                 "CMAKE_TOOLCHAIN_FILE":"${sourceDir}/build/conan_toolchain.cmake"
             }
+        },
+        {
+            "name": "release-gcc",
+            "displayName": "GCC Release",
+            "inherits": "default-gcc",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }   
         }
     ]
 }

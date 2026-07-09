@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 import random
+import argparse
+import mpi4py as mpi
 BUILD_DIR = Path(__file__).parent.parent.parent / "build"
 sys.path.insert(0, str(BUILD_DIR))
 
@@ -24,6 +26,9 @@ def test_knapsackdp():
     #print(f"Knapsack COPA Sequential result: {result_copa_seq.totalValue}, Total Weight: {result_copa_seq.totalWeight}")
     result_mpi = lib.knapsackcopampi(args)
     print(f"Knapsack MPI result: {result_mpi.totalValue}, Total Weight: {result_mpi.totalWeight}")
+    resultdp = lib.knapsackdpmpi(args)
+    if resultdp.totalValue>0:
+        print(f"Knapsack DP MPI result: {resultdp.totalValue}, Total Weight: {resultdp.totalWeight}")
 
 if __name__ == "__main__":
     test_hello()

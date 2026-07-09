@@ -2,3 +2,5 @@
 **/build
 **/.cache
 CMakeCustomPreset.json
+**/__pycache__
+*.csv
