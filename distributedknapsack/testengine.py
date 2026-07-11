@@ -102,9 +102,10 @@ class TestRegister:
         
         with open(self._save_file, mode='a', newline='') as f:
             writer = csv.writer(f)
+            hostname = MPI.Get_processor_name() if test.is_mpi_test else os.uname().nodename
             if not file_exists:
-                writer.writerow(['testname', 'testtype', 'time', 'processors', 'solution_weight', 'solution_profit', 'capacity', 'num_items'])
-            writer.writerow([test_name, test_type, f"{duration:.4f}", processors, result.totalWeight, result.totalValue, self._capacity, test.numItems])
+                writer.writerow(['hostname','testname', 'testtype', 'time', 'processors', 'solution_weight', 'solution_profit', 'capacity', 'num_items'])
+            writer.writerow([hostname, test_name, test_type, f"{duration:.4f}", processors, result.totalWeight, result.totalValue, self._capacity, test.numItems])
 
     def run(self, name: str = "all") -> None:
         if name == "all":
@@ -116,6 +117,9 @@ class TestRegister:
         
         for test_name, test in tests_to_run.items():
             duration, result = test.execute()
+            if test.is_mpi_test:
+                if MPI.COMM_WORLD.rank != 0:
+                    continue  # Only rank 0 prints results for MPI tests
             print(f"{test_name}: {duration:.4f}s | Items: {test.numItems} | "
                   f"Profit: {result.totalValue} | Weight: {result.totalWeight}")
             
