@@ -12,6 +12,53 @@
 \usepackage{algpseudocode}
 \geometry{margin=1in}
 
+\usepackage{xcolor} 
+\definecolor{listinggray}{gray}{0.9}
+\definecolor{lbcolor}{rgb}{0.9,0.9,0.9}
+\definecolor{Darkgreen}{rgb}{0,0.4,0}
+\lstset{
+    backgroundcolor=\color{lbcolor},
+    tabsize=4,    
+%   rulecolor=,
+    language=[GNU]C++,
+        basicstyle=\scriptsize,
+        upquote=true,
+        aboveskip={1.5\baselineskip},
+        columns=fixed,
+        showstringspaces=false,
+        extendedchars=false,
+        breaklines=true,
+        prebreak = \raisebox{0ex}[0ex][0ex]{\ensuremath{\hookleftarrow}},
+        frame=single,
+        numbers=left,
+        showtabs=false,
+        showspaces=false,
+        showstringspaces=false,
+        identifierstyle=\ttfamily,
+        keywordstyle=\color[rgb]{0,0,1},
+        commentstyle=\color[rgb]{0.026,0.112,0.095},
+        stringstyle=\color[rgb]{0.627,0.126,0.941},
+        numberstyle=\color[rgb]{0.205, 0.142, 0.73},
+%        \lstdefinestyle{C++}{language=C++,style=numbers}’.
+}
+\lstset{
+    backgroundcolor=\color{lbcolor},
+    tabsize=4,
+  language=C++,
+  captionpos=b,
+  tabsize=3,
+  frame=lines,
+  numbers=left,
+  numberstyle=\tiny,
+  numbersep=5pt,
+  breaklines=true,
+  showstringspaces=false,
+  basicstyle=\footnotesize,
+%  identifierstyle=\color{magenta},
+  keywordstyle=\color[rgb]{0,0,1},
+  commentstyle=\color{Darkgreen},
+  stringstyle=\color{red}
+}
 
 
 \title{Knapsack distribuito: implementazione, comparazione e analisi}
@@ -320,8 +367,10 @@ l'algoritmo di merging parallelo si articola nel modo seguente: prende in input 
     \item \textbf{Step 2:} Il processore $P_i$ esegue il merge sequenziale di $U_i$ e $V_i$, per $1 \leq i \leq k$, in parallelo con gli altri processori.
 \end{enumerate}
 
+A questo punto si può passare a dividere equamente tra i processori disponibili i blocchi ottenuti e calcolare per ognuno di questi blocchi gli elementi di profitto massimo. 
+
 \begin{algorithm}[H]
-\caption{Search max-value}\label{alg:parallel_max}
+\caption{ALgoritmo di divisione e ricerca dei massimi profitto per blocco}\label{alg:parallel_max}
 \begin{algorithmic}
 \Require Due liste ordinate $A$ e $B$
 \Ensure $MaxA$ e $MaxB$
@@ -340,63 +389,445 @@ l'algoritmo di merging parallelo si articola nel modo seguente: prende in input 
 \end{algorithmic}
 \end{algorithm}
 
+Ora lo spazio delle soluzioni è davvero molto grande, per questo motivo si ricorre a un algoritmo di potatura dell'insieme delle soluzioni 
+
+\begin{algorithm}[H]
+\caption{Algoritmo di pruning parallelo}\label{alg:parallel_pruning}
+\begin{algorithmic}
+\Require Due liste di blocchi $A = \{A_1, A_2, \ldots, A_k\}$ e $B = \{B_1, B_2, \ldots, B_k\}$, capacità $c$
+\Ensure Insieme di coppie di blocchi non potate $remaining$
+\State Inizializza $remaining \gets \emptyset$
+\For{\textbf{all} $P_i$, $1 \leq i \leq k$, \textbf{in parallel}}
+    \State $local\_results \gets \emptyset$
+    \For{$j \gets i$ \textbf{to} $k+i-1$}
+        \State $b\_idx \gets j \mod k$
+        \State $Z \gets A_i.\text{front}.w + B_{b\_idx}.\text{back}.w$
+        \State $Y \gets A_i.\text{back}.w + B_{b\_idx}.\text{front}.w$
+        \If{$Y \leq c$}
+            \Comment{Tutte le coppie nel blocco sono valide}
+            \If{$A_i.\text{maxValue} + B_{b\_idx}.\text{maxValue} > \text{best\_value}$}
+                \State $\text{best\_value} \gets A_i.\text{maxValue} + B_{b\_idx}.\text{maxValue}$
+            \EndIf
+            \State $local\_results.\text{add}(A_i, B_{b\_idx})$
+        \ElsIf{$Z \leq c \land Y > c$}
+            \Comment{Alcune coppie potrebbero essere valide}
+            \State $local\_results.\text{add}(A_i, B_{b\_idx})$
+        \Else
+            \Comment{$Z > c$: nessuna coppia valida, pota il blocco}
+            \State \textbf{skip}
+        \EndIf
+    \EndFor
+\EndFor
+\State $remaining \gets \bigcup_{i=1}^{k} local\_results_i$
+\end{algorithmic}
+\end{algorithm}
+
+L'algoritmo di pruning sfrutta il fatto che i blocchi sono ordinati per peso. Per ogni coppia di blocchi $(A_i, B_j)$, vengono calcolati due valori chiave:
+\begin{itemize}
+    \item $Z = A_i.\text{front}.w + B_j.\text{back}.w$: il peso minimo possibile combinando il primo elemento di $A_i$ con l'ultimo di $B_j$
+    \item $Y = A_i.\text{back}.w + B_j.\text{front}.w$: il peso massimo possibile combinando l'ultimo elemento di $A_i$ con il primo di $B_j$
+\end{itemize}
+
+La logica di potatura è la seguente:
+\begin{enumerate}
+    \item Se $Y \leq c$, tutte le combinazioni tra i due blocchi rispettano il vincolo di capacità. La coppia di blocchi viene mantenuta e il loro massimo profitto combinato viene aggiornato.
+    \item Se $Z \leq c < Y$, alcune combinazioni potrebbero essere valide mentre altre no. La coppia di blocchi viene mantenuta per un'analisi più approfondita.
+    \item Se $Z > c$, nessuna combinazione tra i due blocchi può rispettare il vincolo di capacità. La coppia viene scartata (potata).
+\end{enumerate}
+
+A questo punto è possibile passare alla ricerca parallela della soluzione. L'algoritmo si compone di due sotto-fasi: il secondo salvataggio parallelo dei massimi (Algoritmo 5 del paper COPA) e la ricerca parallela vera e propria (Algoritmo 6).
+
+\subsubsection{Secondo salvataggio parallelo dei massimi}
+Dopo il pruning, al più $2k-1$ coppie di blocchi vengono distribuite equamente tra i $k$ processori: ogni processore $P_i$ gestisce al massimo $s \leq 2$ coppie. Per ogni blocco $B_{it}$ assegnato, si calcola un array di \textit{suffix max}: $
+Max_{i:j}[t]$ rappresenta il profitto massimo tra tutti gli elementi da posizione $j$ a $e$ del blocco $B_{it}$, mentre $L^t_j$ registra l'indice dell'elemento che realizza tale massimo.
+
+\begin{algorithm}[H]
+\caption{Secondo salvataggio parallelo dei massimi (suffix max)}\label{alg:parallel_suffix_max}
+\begin{algorithmic}
+\Require Coppie di blocchi rimanenti dopo il pruning
+\Ensure $Max_{i:j}[t]$ e $L^t_j$ per ogni blocco $B_{it}$
+\For{\textbf{all} $P_i$, $1 \leq i \leq k$, \textbf{in parallel}}
+    \For{$t \gets 0$ \textbf{to} $s-1$}
+        \State $Max_{i:e}[t] \gets b_{it:e}.p$, \quad $L^t_e \gets e$
+        \For{$j \gets e-1$ \textbf{downto} $1$}
+            \If{$b_{it:j}.p > Max_{i:(j+1)}[t]$}
+                \State $Max_{i:j}[t] \gets b_{it:j}.p$, \quad $L^t_j \gets j$
+            \Else
+                \State $Max_{i:j}[t] \gets Max_{i:(j+1)}[t]$, \quad $L^t_j \gets L^t_{j+1}$
+            \EndIf
+        \EndFor
+    \EndFor
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+Questo pre-calcolo consente, durante la ricerca, di conoscere in $O(1)$ il miglior profitto ottenibile da un dato punto in poi nella lista $B$, accelerando notevolmente la scansione.
+
+\subsubsection{Ricerca parallela con two-pointer}
+Ciascun processore esegue una ricerca \textit{two-pointer} sulle proprie coppie di blocchi $(A_i, B_{it})$. Per ogni coppia, due puntatori $x$ (su $A_i$) e $y$ (su $B_{it}$) scorrono i blocchi in direzioni opposte:
+
+\begin{algorithm}[H]
+\caption{Ricerca parallela (two-pointer search)}\label{alg:parallel_search}
+\begin{algorithmic}
+\Require Coppie di blocchi rimanenti dopo il pruning, suffix max arrays
+\Ensure Soluzione finale $Bestvalue$ e $X$
+\For{\textbf{all} $P_i$, $1 \leq i \leq k$, \textbf{in parallel}}
+    \State $t \gets 0$, $Maxvalue_i \gets 0$, $X_i \gets (0,0)$
+    \While{$0 \leq t \leq s-1$}
+        \State Seleziona la coppia di blocchi $(A_i, B_{it})$
+        \State $x \gets 1$, $y \gets 1$
+        \While{$x \leq e \land y \leq e$}
+            \If{$a_{i:x}.w + b_{it:y}.w > c$}
+                \State $y \gets y + 1$ \textbf{and continue}
+            \EndIf
+            \If{$a_{i:x}.p + Max_{i:y}[t] > Maxvalue_i$}
+                \State $Maxvalue_i \gets a_{i:x}.p + Max_{i:y}[t]$
+                \State $X_i \gets (a_{i:x},\; b_{it:L^t_y})$
+            \EndIf
+            \State $x \gets x + 1$
+        \EndWhile
+        \State $t \gets t + 1$
+    \EndWhile
+\EndFor
+\State \textbf{Riduzione globale:} $Bestvalue \gets Maxvalue_1$, $X \gets X_1$
+\For{$i \gets 2$ \textbf{to} $k$}
+    \If{$Bestvalue < Maxvalue_i$}
+        \State $Bestvalue \gets Maxvalue_i$, \quad $X \gets X_i$
+    \EndIf
+\EndFor
+\State Converti le componenti di $X$ in binario e concatena per ottenere la soluzione finale
+\end{algorithmic}
+\end{algorithm}
+
+La logica è la seguente: poiché $A_i$ è ordinato per peso crescente e $B_{it}$ per peso decrescente, quando la somma dei pesi supera la capacità $c$, si incrementa $y$ per passare a un elemento più leggero in $B$. Quando invece la somma è ammissibile, il profitto candidato si calcola come $a_{i:x}.p + Max_{i:y}[t]$, dove $Max_{i:y}[t]$ — grazie al pre-calcolo dei suffix max — rappresenta il miglior profitto ottenibile da $y$ in poi nel blocco $B_{it}$. Questo evita di dover iterare su tutte le coppie di elementi, riducendo la complessità a $O(e) = O(N/k)$.
+
+La complessità complessiva dello stage di ricerca parallela è $O(4N/k + k)$, che nel caso $k = O(N^{1/2})$ diventa $O(2^{n/4})$.
+
 \section{Implementazione dell'esperimento}
 
 l'esperimento si divide in 4 parti distinte: 1) l'implementazione del algoritmo di risoluzione del knapsack con programmazione dinamica: questo metodo è quello più didattico e semplice da implementare, proprio per questo è usato come base per verificare la corretta implementazione negli unit test degli algoritmi successivi. 2) Implementazione dell'algoritmo con programmazione dinamica in MPI 3) Implementazione dell'algoritmo COPA sequenziale e parallelo in shared memory usando OpenMP. 4) Implementazione dell'algoritmo COPA distribuito usando MPI 
 
-\subsection{Implementazione del knapsack in dinamic programming}
+\subsection{Implementazione del knapsack in dynamic programming}
 
 L'implementazione del knapsack in programmazione dinamica sequenziale è decisamente semplice sia nella versione sequenziale che parallela in shared memory: 
-\begin{verbatim}
-        int n = weights.size();
-    std::vector<std::vector<int>> dp(n + 1, std::vector<int>(capacity + 1, 0));
-
-    // Build the dp table
-    for (int i = 1; i <= n; ++i) {
-        #pragma omp parallel for num_threads(numThreads) // Adjust the number of threads as needed
-        for (int w = 0; w <= capacity; ++w) {
-            if (weights[i - 1] <= w) {
-                dp[i][w] = std::max(dp[i - 1][w], dp[i - 1][w - weights[i - 1]] + values[i - 1]);
-            } else {
-                dp[i][w] = dp[i - 1][w];
-            }
+\begin{lstlisting}[caption={Knapsack dynamic programming sequenziale},language=c++]{cpp}
+int n = weights.size();
+std::vector<std::vector<int>> dp(n + 1, std::vector<int>(capacity + 1, 0));
+// Build the dp table
+for (int i = 1; i <= n; ++i) {
+    #pragma omp parallel for num_threads(numThreads) // Adjust the number of threads as needed
+    for (int w = 0; w <= capacity; ++w) {
+        if (weights[i - 1] <= w) {
+            dp[i][w] = std::max(dp[i - 1][w], dp[i - 1][w - weights[i - 1]] + values[i - 1]);
+        } else {
+            dp[i][w] = dp[i - 1][w];
         }
     }
-\end{verbatim}
+}
+\end{lstlisting}
 
 Questo algoritmo ha una complessità di O(N*C) dove C è la capacità dello zaino, la parallelizzazione avviene scomponendo il ciclo for interno che scrive i valori nella tabella, non si può parallelizzare il ciclo for più esterno perchè per risolvere la linea successiva bisogna prima calcolare tutti i valori per quella precedente. 
-\\
-L'implementazione MPI dell'algoritmo è molto simile, l'approccio seguito è stato quello di assegnare la tabella a un master, che scompone la linea successiva da calcolare in task di una certa dimensione, i worker non dispongono dell'intera tabella ma solo della linea precedente per risparmiare memoria.
 
-\begin{algorithm}
-\caption{Worker}
-	int n = static_cast<int>(weights.size());
-	std::vector<uint32_t> prev;
-	for (int i = 1; i <= n; ++i)
-	{
-        broadcast(MPI_COMM_WORLD,prev,0); //broadcast the previous line from master
-        while(!terminate_sent_from_master)
+\subsubsection{Implementazione MPI}
+L'implementazione MPI dell'algoritmo è molto simile, l'approccio seguito è stato quello di assegnare la tabella a un master, che scompone la linea successiva da calcolare in task di una certa dimensione, i worker non dispongono dell'intera tabella ma solo della linea precedente.
+
+\begin{lstlisting}[caption={Worker task},language=c++]{cpp}
+int n = static_cast<int>(weights.size());
+std::vector<uint32_t> prev;
+for (int i = 1; i <= n; ++i)
+{
+    broadcast(MPI_COMM_WORLD,prev,0); //broadcast the previous line from master
+    while(!terminate_sent_from_master)
+    {
+    NodeTask task = comm.recv(any_source,tag::task);
+    for (int w = task.startIndex; w <= task.endIndex; ++w)
         {
-        NodeTask task = comm.recv(any_source,tag::task);
-    	for (int w = task.startIndex; w <= task.endIndex; ++w)
-			{
-				if (weights[i - 1] <= w)
-				{
-					line[w] = std::max(prev[w], prev[w - weights[i - 1]] + values[i - 1]);
-				}
-			}
-        comm.send(Response{task,line},0);
+            if (weights[i - 1] <= w)
+            {
+                line[w] = std::max(prev[w], prev[w - weights[i - 1]] + values[i - 1]);
+            }
         }
+    comm.send(Response{task,line},0);
     }
-\end{algorithm}
+    comm.barrier();
+}
+\end{lstlisting}
 
-\begin{algorithm}
-\caption{Master}
+Il master invece possiede la tabella e distribuisce i diversi task ai diversi worker, i task sono dei range di indici che il worker deve computare, una volta finito il worker invia al master il blocco appena computato e si mette in attesa di un nuovo task, se non ve ne sono più il master invia un messaggio di terminazione ai worker che finiscono per quel ciclo di stare in attesa. La chunk size per i task è passata come argomento oppure è calcolata a partire dalla numerosità degli elementi nella riga, in modo che ogni processore non debba operare su più di 1000 elementi per volta.
 
-\end{algorithm}
+\begin{lstlisting}[caption={Master Task},language=c++]{cpp}
+int n = static_cast<int>(weights.size());
+std::vector<std::vector<uint32_t>> dp(n + 1, std::vector<uint32_t>(capacity + 1, 0));
+for (int i = 1; i <= n; ++i)
+{
+    broadcast(MPI_COMM_WORLD,dp[i - 1].data(),capacity+1,0); //broadcast the previous line from master
+    int actual_index = 0;
+    int active = 0;
+    auto generator = [capacity, chunk_size,&actual_index,&active]() -> std::optional<NodeTask> {
+        if (actual_index > capacity)
+        {
+            return std::nullopt;
+        }
+        int start = actual_index;
+        int end = std::min(actual_index + chunk_size - 1, capacity);
+        actual_index = end + 1;
+        active++;
+        return NodeTask{start, end};
+    };
+    send_a_task_to_all_workers(comm, generator);
+    while(active>0)
+    {
+        auto result= receive_a_result_from_any_worker(comm);
+        active--;
+        copy_result_to_dp_table(dp[i], result);
+    }
+    terminate_all_workers(comm);
+    comm.barrier();
+}
+\end{lstlisting}
 
+terminati i cicli il master può leggere dalla DP il risultato. Si evince subito che l'implementazione MPI è piuttosto semplice e segue uno schema molto simile alla versione Shared Memory, tuttavia presenta lo svantaggio di dover comunicare almeno la linea precedente in DP a tutti i worker. Svantaggio che si avrebbe comunque anche nel caso della versione più didattica, in cui non esiste la DP perchè non si esegue il backtracking per ricostruire gli oggetti scelti, ma si calcola solo il profitto massimo ottenibile. In questo caso infatti, per calcolare la linea successiva della DP è necessario conoscere la linea precedente, quindi anche in questo caso si dovrebbe comunicare a tutti i worker la linea precedentemente calcolata. 
 
 \subsection{Knapsack COPA}
+
+La versione COPA dell'algoritmo è stata pensata per essere eseguita in shared memory e per ovviare a un problema della versione in dynamic programming dell'algoritmo, cioè che la grandezza della tabella cresce con l'aumentare della capacità dello zaino. Invece nella versione COPA il numero di soluzioni da esplorare è sostanzialmente legato al solo numero degli elementi, tuttavia questo insieme cresce con un ritmo di $2^{n/2}$, quindi per un numero di elementi superiore a 40-50 il numero di combinazioni diventa proibitivo da memorizzare (come anche sottolineato nell'articolo originale). Visto che tutti gli algoritmi hanno come dipendenza la funzione di generazione delle soluzioni, si può partire da li.
+
+\subsubsection{Algoritmo di generazione dei sottoinsiemi}
+I sottoinsiemi sono generati partendo dalla lista generale, dividendola in due e generando a partire dalle due liste spezzate un insieme di sottoinsiemi di soluzioni. L'algoritmo si articola in due fasi: 1) copia della lista precedente e aggiunta dell'elemento a ogni insieme 2) merging della nuova lista con quella precedente usando l'algoritmo di coranking.
+
+\begin{lstlisting}[language=c++,caption={funzione di Parallel Merging}]{cpp}
+using namespace std::ranges;
+int total_size = static_cast<int>(A.size() + B.size());
+
+#pragma omp parallel for num_threads(num_threads)
+for (int t = 0; t < num_threads; ++t)
+{
+    int start = t * total_size / num_threads;
+    int end = (t + 1) * total_size / num_threads;
+
+    auto [a_start, b_start] = co_rank(A, B, start);
+    auto [a_end, b_end] = co_rank(A, B, end);
+    std::merge(begin(A) + a_start, begin(A) + a_end, begin(B) + b_start, begin(B) + b_end, begin(output) + start);
+}
+\end{lstlisting}
+
+\begin{lstlisting}[caption={Funzione di generazione e merging},language=c++]{cpp}
+for (int item_idx = 0; auto &&item : r)
+{
+    std::vector<CopaSubset> shifted{subsets.size()};
+    auto [w, v] = item;
+    for (int i = 0; i < static_cast<int>(shifted.size()); i++)
+    {
+        shifted[i] = subsets[i];
+        shifted[i].addItem(item_idx, w, v);
+    }
+    item_idx++;
+    std::vector<CopaSubset> merged;
+    merged.resize(subsets.size() + shifted.size());
+    parallel_merge(subsets, shifted, merged, numthreads);    
+    subsets = std::move(merged);
+}
+\end{lstlisting}
+
+Per aumentare il più possibile la località dei dati durante questa fase, si copia il dato e gli si aggiunge l'item direttamente nelle istruzioni successive. Questa funzione nello specifico restituisce il metodo di generazione della lista A in ordine crescente, per la lista B è sufficiente usare std::reverse, una possibile ottimizzazione sarebbe quella di usare std::ranges::reverse in modo che il reversing dei dati sia lazy, cioè effettuato solo quando si pesca dal range. Tuttavia visto che le funzioni successive richiederanno l'uso di input range, che richiede che il range in entrata sia contiguo, questa operazione non sarà possibile poichè il reverse range non è contiguo per lo standard c++. A questo punto si può procedere e suddividere la lista di blocchi in sottoinsiemi di blocchi equamente distribuiti tra i processori, avendo cura di calcolare il massimo profitto durante questa operazione.
+
+\begin{lstlisting}[caption={Funzione di calcolo del massimo e distribuzione dei blocchi},language=c++]{cpp}
+int n = static_cast<int>(std::ranges::size(input));
+int k = num_threads;
+int block_size = n / k;
+int remainder = n % k;
+#pragma omp parallel for num_threads(num_threads)
+for (int i = 0; i < k; ++i)
+{
+    int start = i * block_size + std::min(i, remainder);
+    int end = start + block_size + (i < remainder ? 1 : 0);
+    if (start >= end)
+    {
+        output[i] = {std::span<const CopaSubset>{}, 0};
+        continue;
+    }
+    auto span = std::ranges::subrange(std::ranges::begin(input) + start, std::ranges::begin(input) + end);
+    int max_val = 0;
+    for (const auto &elem : span)
+    {
+        if (elem.totalValue > max_val)
+            max_val = elem.totalValue;
+    }
+    output[i] = {span, max_val};
+}
+\end{lstlisting}
+
+A questo punto ci si ritrova in output una lista di sottoinsiemi di blocchi, ogni elemento corrisponde al sottoinsieme su cui ci si aspetta che il processo p operi.
+
+\subsubsection{Pruning delle soluzioni}
+
+Una volta compiuta l'operazione di distribuzione si può passare a eseguire il pruning delle soluzioni.
+
+\begin{lstlisting}[caption={Funzione di pruning di un sottoinsieme di blocchi},language=c++]{cpp}
+int k = static_cast<int>(blocksB.size());
+int best_value = 0;
+for (int j = i; j < k + i; ++j)
+{
+    int b_idx = j % k;
+    const auto &blockB = blocksB[b_idx];
+    if (blockB.block.empty())
+        continue;
+    int Z = blockA.block.front().totalWeight + blockB.block.back().totalWeight;
+    int Y = blockA.block.back().totalWeight + blockB.block.front().totalWeight;
+
+    // Note: prune is done by not adding the pair to local_results
+    if (Y <= capacity)
+    {
+        // All pairs in this block pair are valid; save max profit and prune
+        if (blockA.maxValue + blockB.maxValue > best_value)
+        {
+            best_value = blockA.maxValue + blockB.maxValue;
+        }
+        remaining.emplace_back(blockA, blockB);
+    }
+    else if (Z <= capacity && Y > capacity)
+    {
+        remaining.emplace_back(blockA, blockB);
+    }
+    else if (Z > capacity)
+    {
+        // No pairs in this block pair are valid; prune
+    }
+}
+\end{lstlisting}
+
+La suddetta funzione deve essere chiamata in modo parallelo in questo modo. La suddivisione è necessaria poichè questa implementazione della funzione di pruning è stata riutilizzata anche nella versione MPI.
+\begin{lstlisting}[language=c++]{cpp}
+std::vector<std::vector<std::pair<CopaBlock, CopaBlock>>> local_results(threads);
+#pragma omp parallel for num_threads(threads)
+for (int i = 0; i < threads; ++i)
+{
+    const auto &blockA = blocksA[i];
+    prune_block_pair(blockA, blocksB, local_results[i], capacity, i);
+}
+// Merge local results from all processors
+for (const auto &local : local_results)
+{
+    remaining.insert(remaining.end(), local.begin(), local.end());
+}
+\end{lstlisting}
+
+A questo punto si può illustrare la funzione di ricerca parallela dei massimi, che viene chiamata sui blocchi rimanenti in questo modo, anche in questo caso la funzione è stata disaccoppiata poichè la parte di calcolo è stata riutilizzata nella versione a memoria distribuita.
+
+\begin{lstlisting}[language=c++]{cpp}
+#pragma omp parallel for num_threads(numThreads)
+for (int i = 0; i < numThreads; ++i)
+{
+    const auto &[blockA, blockB] = remainingPairs[i];
+
+    // Stage 5: Two-pointer search within this block pair
+    BlockPairSearchResult result = block_pair_pointer_search(blockA, blockB, capacity);
+    processBestVal[i] = result.bestVal;
+    processBestAIdx[i] = result.bestAIdx;
+    processBestBIdx[i] = result.bestBIdx;
+}
+\end{lstlisting}
+
+La funzione prende in input le coppie rimanenti in ciascuna lista, che è un vettore di coppie di blocchi, e li esamina in questo modo: prima calcola il suffisso massimo di profitto tra i blocchi della lista B , dopodichè esegue una comparazione con i pesi della lista A. 
+
+\begin{lstlisting}[language=c++,caption={Funzione di ricerca del massimo tra i blocchi rimanenti}]{cpp}
+int blocka_size = static_cast<int>(blockA.block.size());
+int blockb_size = static_cast<int>(blockB.block.size());
+// Stage 4: Suffix max for this B block
+std::vector<int> suffixMaxVal(blockb_size);
+std::vector<int> suffixMaxIdx(blockb_size);
+block_suffix_max_values(blockB.block, suffixMaxVal, suffixMaxIdx);
+
+int x = 0, y = 0;
+int bestVal = 0, bestA = 0, bestB = 0;
+while (x < blocka_size && y < blockb_size)
+{
+    if (blockA.block[x].totalWeight + blockB.block[y].totalWeight > capacity)
+    {
+        y++;
+        continue;
+    }
+    int candidate = blockA.block[x].totalValue + suffixMaxVal[y];
+    if (candidate > bestVal)
+    {
+        bestVal = candidate;
+        bestA = blockA.block[x].index;
+        bestB = suffixMaxIdx[y];
+    }
+    x++;
+}
+return {bestVal, bestA, bestB};
+\end{lstlisting}
+
+La funzione di calcolo dei suffissi è implementata in questo modo
+
+\begin{lstlisting}[language=c++]{cpp}
+int e = static_cast<int>(block.size());
+suffixMaxValues[e - 1] = block[e - 1].totalValue;
+suffixMaxIndices[e - 1] = block[e - 1].index;
+for (int j = e - 2; j >= 0; --j)
+{
+    if (block[j].totalValue > suffixMaxValues[j + 1])
+    {
+        suffixMaxValues[j] = block[j].totalValue;
+        suffixMaxIndices[j] = block[j].index;
+    }
+    else
+    {
+        suffixMaxValues[j] = suffixMaxValues[j + 1];
+        suffixMaxIndices[j] = suffixMaxIndices[j + 1];
+    }
+}
+\end{lstlisting}
+
+\subsubsection{L'algoritmo completo}
+
+La funzione completa si articola quindi in questo modo 
+
+\begin{lstlisting}[language=c++,caption={Funzione knapsackcopa completa}]{cpp}
+using namespace std::views;
+auto list = zip(weights, values);
+int n = static_cast<int>(weights.size());
+auto Alist = take(list, n / 2);
+auto Blist = drop(list, n / 2);
+std::vector<CopaSubset> A, B;
+generate_copa_subsets(Alist, numThreads); 
+generate_copa_subsets(Blist, numThreads, true);
+int N = static_cast<int>(B.size());
+// Stage 2 : Parallel suffix max for B (MaxBj and Lj)
+std::vector<CopaBlock> blocksA(numThreads);
+std::vector<CopaBlock> blocksB(numThreads);
+distribute_block_per_processor(A, blocksA, numThreads);
+distribute_block_per_processor(B, blocksB, numThreads);
+// Stage 3: Parallel pruning
+std::vector<std::pair<CopaBlock, CopaBlock>> remainingPairs;
+prune(blocksA, blocksB, remainingPairs, capacity, numThreads);
+// Stages 4+5: For each remaining block pair, compute suffix max and search
+int k = static_cast<int>(remainingPairs.size());
+int bestAIdx = 0, bestBIdx = 0, bestValue = 0;
+std::vector<int> localBestVal(k, 0);
+std::vector<int> localBestAIdx(k, 0);
+std::vector<int> localBestBIdx(k, 0);
+parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k); });
+// Reduce across all remaining pairs
+for (int i = 0; i < k; ++i)
+{
+    if (localBestVal[i] > bestValue)
+    {
+        bestValue = localBestVal[i];
+        bestAIdx = localBestAIdx[i];
+        bestBIdx = localBestBIdx[i];
+    }
+}
+// Reconstruct solution
+KnapsackSolution solution{};
+solution.totalValue = bestValue;
+solution.totalWeight = A[bestAIdx].totalWeight + B[bestBIdx].totalWeight;
+auto items = (A[bestAIdx] << B[bestBIdx]).getItemIndices();
+solution.items.reserve(items.size());
+solution.items.insert(solution.items.end(), items.begin(), items.end());
+return solution;
+\end{lstlisting}
 
 \subsection{Knapsack COPA MPI}
 

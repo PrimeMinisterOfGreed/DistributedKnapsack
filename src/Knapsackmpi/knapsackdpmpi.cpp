@@ -64,32 +64,35 @@ static KnapsackSolution maintask(boost::mpi::communicator &comm, const std::vect
 	for (int i = 1; i <= n; ++i)
 	{
 		SPDLOG_DEBUG("[mainnode] item {}: broadcasting dp[{}] (size {})", i, i - 1, capacity + 1);
-		int row_size = static_cast<int>(dp[i - 1].size());
-		broadcast(comm, row_size, 0);
-		broadcast(comm, dp[i - 1].data(), row_size, 0);
+		broadcast(comm, dp[i - 1].data(), capacity+1, 0);
 		SPDLOG_DEBUG("[mainnode] item {}: broadcast complete", i);
+		int actual_index = 0;
+		int active = 0;
+		auto generator = [capacity, chunk_size,&actual_index,&active]() -> std::optional<NodeTask> {
+			if (actual_index > capacity)
+			{
+				return std::nullopt;
+			}
+			int start = actual_index;
+			int end = std::min(actual_index + chunk_size - 1, capacity);
+			actual_index = end + 1;
+			active++;
+			return NodeTask{start, end};
+		};
 
-		std::deque<NodeTask> tasks;
-		for (int w = 0; w <= capacity; w += chunk_size)
+
+		for (int rank = 1; rank <= num_workers; ++rank)
 		{
-			tasks.push_back({w, std::min(w + chunk_size - 1, capacity)});
-		}
-		SPDLOG_DEBUG("[mainnode] item {}: {} tasks created", i, tasks.size());
-
-		int num_tasks = static_cast<int>(tasks.size());
-		int in_flight = 0;
-
-		for (int rank = 1; rank <= num_workers && !tasks.empty(); ++rank)
-		{
-			auto task = tasks.front();
-			tasks.pop_front();
-			SPDLOG_DEBUG("[mainnode] item {}: sending TASK[{},{}] to rank {}", i, task.startIndex, task.endIndex, rank);
-			comm.send(rank, NODETAG::TASK, task);
-			in_flight++;
+			auto task = generator();
+			if (!task.has_value())
+			{
+				break;
+			}
+			SPDLOG_DEBUG("[mainnode] item {}: sending TASK[{},{}] to rank {}", i, task->startIndex, task->endIndex, rank);
+			comm.send(rank, NODETAG::TASK, task.value());
 		}
 		SPDLOG_DEBUG("[mainnode] item {}: {} tasks sent initially, {} remaining", i, in_flight, tasks.size());
-		int completed = 0;
-		while (completed < num_tasks)
+		while (active > 0)
 		{
 			NodeResponse resp{};
 			NodeResponseData data;
@@ -101,20 +104,17 @@ static KnapsackSolution maintask(boost::mpi::communicator &comm, const std::vect
 			SPDLOG_DEBUG("[mainnode] item {}: receiving DATA from rank {}", i, status.source());
 			comm.recv(status.source(), NODETAG::DATA, data);
 			SPDLOG_DEBUG("[mainnode] item {}: received DATA, line.size={}", i, data.line.size());
-
+			active--;
 			for (int w = resp.startIndex; w <= resp.endIndex; ++w)
 			{
 				dp[i][w] = data.line[w];
 			}
-			completed++;
-
-			if (!tasks.empty())
+			auto task = generator();
+			if (task.has_value())
 			{
-				auto task = tasks.front();
-				tasks.pop_front();
-				SPDLOG_DEBUG("[mainnode] item {}: sending next TASK[{},{}] to rank {}", i, task.startIndex,
-							 task.endIndex, status.source());
-				comm.send(status.source(), NODETAG::TASK, task);
+				SPDLOG_DEBUG("[mainnode] item {}: sending next TASK[{},{}] to rank {}", i, task->startIndex,
+							 task->endIndex, status.source());
+				comm.send(status.source(), NODETAG::TASK, task.value());
 				SPDLOG_DEBUG("[mainnode] item {}: posted irecv for rank {}", i, status.source());
 			}
 		}
@@ -124,9 +124,9 @@ static KnapsackSolution maintask(boost::mpi::communicator &comm, const std::vect
 		{
 			NodeResponse resp{};
 			comm.send(rank, NODETAG::TERMINATE, NodeTask{0, 0});
-			comm.recv(rank, NODETAG::RESPONSE, resp); // wait for worker to acknowledge termination
 		}
 		SPDLOG_DEBUG("[mainnode] item {}: done", i);
+		comm.barrier();
 	}
 	SPDLOG_DEBUG("[mainnode] DP complete, optimal value = {}", dp[n][capacity]);
 	KnapsackSolution solution;
@@ -156,25 +156,18 @@ static void workertask(boost::mpi::communicator &comm, const std::vector<int> &w
 		line.clear();
 		line.resize(capacity + 1, 0);
 		SPDLOG_DEBUG("[workernode] item {}: waiting for broadcast of dp[{}]", i, i - 1);
-		int row_size;
-		broadcast(comm, row_size, 0);
 		SPDLOG_DEBUG("[workernode] item {}: received row_size = {}", i, row_size);
-		if (static_cast<int>(line.size()) != row_size)
-			line.resize(row_size);
-		broadcast(comm, line.data(), row_size, 0);
+		broadcast(comm, line.data(),line.size(), 0);
 
-		bool end = false;
-		while (!end)
+		for(;;)
 		{
 			NodeTask task{};
 			auto status = comm.recv(any_source, any_tag, task);
 
 			if (status.tag() == NODETAG::TERMINATE)
 			{
-				end = true;
 				SPDLOG_DEBUG("[workernode] item {}: received TERMINATE from rank {}", i, status.source());
-				comm.send(status.source(), NODETAG::RESPONSE, NodeResponse{0, 0}); // acknowledge termination
-				continue;
+				break;
 			}
 
 			auto prev = line;
@@ -189,6 +182,7 @@ static void workertask(boost::mpi::communicator &comm, const std::vector<int> &w
 			comm.send(status.source(), NODETAG::RESPONSE, NodeResponse{task.startIndex, task.endIndex});
 			comm.send(status.source(), NODETAG::DATA, NodeResponseData{line});
 		}
+		comm.barrier();
 	}
 }
 

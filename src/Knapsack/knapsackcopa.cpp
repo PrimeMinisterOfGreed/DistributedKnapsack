@@ -120,49 +120,7 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	int k = static_cast<int>(remainingPairs.size());
 	int bestAIdx = 0, bestBIdx = 0, bestValue = 0;
 
-	if (k == 0)
-	{
-		spdlog::warn("pruned all blocks revert to 2 pointers search");
-		// Fallback: all block pairs were pruned, do two-pointer scan over full A and B
-		// Compute suffix max for B
-		std::vector<int> MaxB(N);
-		std::vector<int> L(N);
-		MaxB[N - 1] = B[N - 1].totalValue;
-		L[N - 1] = static_cast<int>(N - 1);
-
-#pragma omp parallel for num_threads(numThreads)
-		for (int i = static_cast<int>(N - 2); i >= 0; i--)
-		{
-			if (B[i].totalValue > MaxB[i + 1])
-			{
-				MaxB[i] = B[i].totalValue;
-				L[i] = i;
-			}
-			else
-			{
-				MaxB[i] = MaxB[i + 1];
-				L[i] = L[i + 1];
-			}
-		}
-
-		// Two-pointer search over full arrays
-		int i = 0, j = 0;
-		while (i < static_cast<int>(A.size()) && j < static_cast<int>(N))
-		{
-			if (A[i].totalWeight + B[j].totalWeight > capacity)
-			{
-				j++;
-				continue;
-			}
-			if (A[i].totalValue + MaxB[j] > bestValue)
-			{
-				bestValue = A[i].totalValue + MaxB[j];
-				bestAIdx = i;
-				bestBIdx = L[j];
-			}
-			i++;
-		}
-	}
+	
 	std::vector<int> localBestVal(k, 0);
 	std::vector<int> localBestAIdx(k, 0);
 	std::vector<int> localBestBIdx(k, 0);
