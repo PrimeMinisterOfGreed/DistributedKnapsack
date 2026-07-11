@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 import random
+import argparse
+import mpi4py as mpi
 BUILD_DIR = Path(__file__).parent.parent.parent / "build"
 sys.path.insert(0, str(BUILD_DIR))
 
@@ -12,20 +14,21 @@ def test_hello():
 
 def test_knapsackdp():
     random.seed(42)
-    weights = [random.randint(1, 100) for x in range(5000)]
-    values = [random.randint(1, 100) for x in range(5000)]
-    capacity = 1000
+    weights = [random.randint(1, 50) for x in range(30)]
+    values = [random.randint(1, 50) for x in range(30)]
+    capacity = random.randint(1, 1000)
     args = lib.KnapsackArguments(weights, values, capacity)
-    #result = lib.knapsackdp(args,1)
-    #print(f"Knapsack result: {result.totalValue}, Total Weight: {result.totalWeight}")
-    result = lib.knapsackdpmpi(args)
-    print(f"Knapsack MPI result: {result.totalValue}, Total Weight: {result.totalWeight}")
-   # result_copa = lib.knapsackcopa(args,16)
+    result = lib.knapsackdp(args,1)
+    print(f"Knapsack result: {result.totalValue}, Total Weight: {result.totalWeight}")
+    #result_copa = lib.knapsackcopa(args,16)
    # print(f"Knapsack COPA result: {result_copa.totalValue}, Total Weight: {result_copa.totalWeight}")
    #result_copa_seq = lib.knapsackcopasequential(args)
     #print(f"Knapsack COPA Sequential result: {result_copa_seq.totalValue}, Total Weight: {result_copa_seq.totalWeight}")
-    #result_mpi = lib.knapsackcopampi(args)
-    #print(f"Knapsack MPI result: {result_mpi.totalValue}, Total Weight: {result_mpi.totalWeight}")
+    result_mpi = lib.knapsackcopampi(args)
+    print(f"Knapsack MPI result: {result_mpi.totalValue}, Total Weight: {result_mpi.totalWeight}")
+    resultdp = lib.knapsackdpmpi(args)
+    if resultdp.totalValue>0:
+        print(f"Knapsack DP MPI result: {resultdp.totalValue}, Total Weight: {resultdp.totalWeight}")
 
 if __name__ == "__main__":
     test_hello()

@@ -2,6 +2,7 @@
 #include "Knapsackmpi/knapsackmpi.hpp"
 #include <boost/python.hpp>
 #include <iostream>
+#include <spdlog/spdlog.h>
 
 void hello()
 {
@@ -35,23 +36,12 @@ KnapsackSolution knapsackdpsolver(KnapsackArguments args, int numThreads)
 
 KnapsackSolution knapsackdpmpisolver(KnapsackArguments args)
 {
-	MPI_Init(NULL, NULL);
 	auto comm = boost::mpi::communicator();
 	auto rank = comm.rank();
 	auto res = knapsackdpmpi(comm, args.weights, args.values, args.capacity);
-	MPI_Finalize();
 	if (res.has_value())
 		return res.value();
-	else if (!res.has_value() && rank!= 0)
-	{
-		std::cerr << "Error: no solution for non root node" << std::endl;
-		return KnapsackSolution();
-	}
-	else
-	{
-		std::cerr << "Error: No solution found by knapsackdpmpi" << std::endl;
-		return KnapsackSolution();
-	}
+	return KnapsackSolution();
 }
 
 
@@ -60,11 +50,7 @@ KnapsackSolution knapsackcopasolver(KnapsackArguments args, int numThreads)
 	auto res = knapsackcopa(args.weights, args.values, args.capacity, numThreads);
 	if (res.has_value())
 		return res.value();
-	else
-	{
-		std::cerr << "Error: No solution found by knapsackcopa" << std::endl;
-		return KnapsackSolution();
-	}
+	return KnapsackSolution();
 }
 
 KnapsackSolution knapsackcopasequentialsolver(KnapsackArguments args)
@@ -72,20 +58,14 @@ KnapsackSolution knapsackcopasequentialsolver(KnapsackArguments args)
 	auto res = knapsackcopasequential(args.weights, args.values, args.capacity);
 	if (res.has_value())
 		return res.value();
-	else
-	{
-		std::cerr << "Error: No solution found by knapsackcopasequential" << std::endl;
-		return KnapsackSolution();
-	}
+	return KnapsackSolution();
 }
 
 KnapsackSolution knapsackcopampisolver(KnapsackArguments args, int numThreads)
 {
-	MPI_Init(NULL, NULL);
 	auto comm = boost::mpi::communicator();	
 	auto rank = comm.rank();
 	auto res = knapsackcopampi(comm,args.weights, args.values, args.capacity);
-	MPI_Finalize();
 	if (res.has_value())
 		return res.value();
 	else if(!res.has_value() && rank!= 0)
@@ -98,6 +78,11 @@ KnapsackSolution knapsackcopampisolver(KnapsackArguments args, int numThreads)
 		std::cerr << "Error: No solution found by knapsackcopampi" << std::endl;
 		return KnapsackSolution();
 	}
+}
+
+void disable_logging()
+{
+	spdlog::set_level(spdlog::level::err);
 }
 
 BOOST_PYTHON_MODULE(libdistributed_knapsack)
@@ -122,4 +107,5 @@ BOOST_PYTHON_MODULE(libdistributed_knapsack)
 		(boost::python::arg("args"), boost::python::arg("numThreads") = 1));
 	def("knapsackdpmpi", knapsackdpmpisolver,
 		(boost::python::arg("args")));
+	def("disable_logging", disable_logging);
 }

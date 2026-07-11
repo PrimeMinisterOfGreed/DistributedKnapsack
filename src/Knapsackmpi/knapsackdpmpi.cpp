@@ -49,13 +49,13 @@ enum NODETAG
 	TERMINATE = 4
 };
 
-static KnapsackSolution mainnode(boost::mpi::communicator &comm, const std::vector<int> &weights,
+static KnapsackSolution maintask(boost::mpi::communicator &comm, const std::vector<int> &weights,
 								 const std::vector<int> &values, int capacity)
 {
 	using namespace boost::mpi;
 	int n = static_cast<int>(weights.size());
 	int num_workers = comm.size() - 1;
-	int chunk_size = (capacity+1) / num_workers;
+	int chunk_size = (capacity + 1) / num_workers;
 	SPDLOG_DEBUG("[mainnode] starting: n={}, capacity={}, workers={}, chunk_size={}", n, capacity, num_workers,
 				 chunk_size);
 
@@ -124,7 +124,7 @@ static KnapsackSolution mainnode(boost::mpi::communicator &comm, const std::vect
 		{
 			NodeResponse resp{};
 			comm.send(rank, NODETAG::TERMINATE, NodeTask{0, 0});
-			comm.recv(rank, NODETAG::RESPONSE,resp); // wait for worker to acknowledge termination
+			comm.recv(rank, NODETAG::RESPONSE, resp); // wait for worker to acknowledge termination
 		}
 		SPDLOG_DEBUG("[mainnode] item {}: done", i);
 	}
@@ -144,7 +144,7 @@ static KnapsackSolution mainnode(boost::mpi::communicator &comm, const std::vect
 	return solution;
 }
 
-static void workernode(boost::mpi::communicator &comm, const std::vector<int> &weights, const std::vector<int> &values,
+static void workertask(boost::mpi::communicator &comm, const std::vector<int> &weights, const std::vector<int> &values,
 					   int capacity)
 {
 	using namespace boost::mpi;
@@ -197,11 +197,12 @@ std::optional<KnapsackSolution> knapsackdpmpi(boost::mpi::communicator &comm, co
 {
 	if (comm.rank() == 0)
 	{
-		return {mainnode(comm, weights, values, capacity)};
+
+		return {maintask(comm, weights, values, capacity)};
 	}
 	else
 	{
-		workernode(comm, weights, values, capacity);
+		workertask(comm, weights, values, capacity);
 		return std::nullopt;
 	}
 }

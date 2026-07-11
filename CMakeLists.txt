@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.26)
 project(DistributedKnapsack C CXX)
 
-add_subdirectory(libs/tasker)
 
 find_package(OpenMP REQUIRED)
 find_package(MPI REQUIRED)
