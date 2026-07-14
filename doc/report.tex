@@ -808,10 +808,12 @@ int bestAIdx = 0, bestBIdx = 0, bestValue = 0;
 std::vector<int> localBestVal(k, 0);
 std::vector<int> localBestAIdx(k, 0);
 std::vector<int> localBestBIdx(k, 0);
-parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k); });
+parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k);
 // Reduce across all remaining pairs
+#pragma omp parallel for num_threads(numThreads)
 for (int i = 0; i < k; ++i)
 {
+    #pragma omp critical
     if (localBestVal[i] > bestValue)
     {
         bestValue = localBestVal[i];

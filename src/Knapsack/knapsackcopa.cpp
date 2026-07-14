@@ -129,10 +129,13 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 			   [&]() { parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k); });
 
 	// Reduce across all remaining pairs
+	#pragma omp parallel for num_threads(numThreads)
 	for (int i = 0; i < k; ++i)
 	{
+		#pragma omp critical
 		if (localBestVal[i] > bestValue)
 		{
+			
 			bestValue = localBestVal[i];
 			bestAIdx = localBestAIdx[i];
 			bestBIdx = localBestBIdx[i];
