@@ -108,10 +108,8 @@ constexpr void mpi_parallel_merge(communicator &comm, const std::vector<CopaSubs
 
 	comm.barrier();
 
-	gatherv(comm, local_result.data(), proc.output_sizes[rank], output.data(), proc.output_sizes,
-			proc.output_displacements, 0);
-
-	broadcast(comm, output, 0);
+	all_gatherv(comm, local_result.data(), output.data(), proc.output_sizes,
+			proc.output_displacements);
 }
 
 constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
@@ -152,8 +150,8 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 				local_shifted[i].addItem(item_idx, w, v);
 			}
 
-			gatherv(comm, local_shifted.data(), procedure.sizes[comm.rank()], shifted.data(), procedure.sizes,
-					procedure.displacements, 0);
+			all_gatherv(comm, local_shifted.data(), shifted.data(), procedure.sizes,
+					procedure.displacements);
 		}
 		item_idx++;
 
@@ -165,13 +163,6 @@ constexpr std::vector<CopaSubset> mpi_generate_copa_subsets(communicator &comm,
 		}
 		else
 		{
-			if (comm.rank() != 0)
-			{
-				subsets.clear();
-				shifted.clear();
-			}
-			broadcast(comm, subsets, 0);
-			broadcast(comm, shifted, 0);
 			newSubsets.resize(subsets.size() + shifted.size());
 			mpi_parallel_merge(comm, subsets, shifted, newSubsets);
 		}

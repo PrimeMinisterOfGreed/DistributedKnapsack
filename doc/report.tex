@@ -831,11 +831,163 @@ solution.items.insert(solution.items.end(), items.begin(), items.end());
 return solution;
 \end{lstlisting}
 
+Questa funzione mette semplicemente insieme tutti i passi dell'algoritmo: 1) si generano i 2 subsets dividendo in 2 la lista di pesi e profitti 2) si distribuiscono i blocchi tra i processori e si cercano i primi massimi profitti tra i blocchi 3) si esegue la potatura dei blocchi 4) si effettua il secondo algoritmo di ricerca dei massimi e si estrae la soluzione finale concatenando gli indici degli oggetti rappresentati come stringa binaria.
+
 \subsection{Knapsack COPA MPI}
+Questo algoritmo è stato concepito principalmente per un utilizzo in shared memory, non è stato pensato per essere utilizzato invece in memoria distribuita. Tuttavia è possibile farne utilizzo, introducendo delle accortezze per minimizzare il più possibile lo scambio di dati. Partendo dalle funzioni di generazione dei subsets
+
+\subsubsection{Generazione dei subsets}
+
+\begin{lstlisting}[language=c++,caption={Funzione di merge parallelo della lista}]{cpp}
+auto proc = compute_corank_procedure(comm, A, B);
+int rank = comm.rank();
+int a_start = proc.a_displacements[rank];
+int a_end = a_start + proc.a_sizes[rank];
+int b_start = proc.b_displacements[rank];
+int b_end = b_start + proc.b_sizes[rank];
+std::vector<CopaSubset> local_result(proc.output_sizes[rank]);
+std::merge(A.begin() + a_start, A.begin() + a_end, B.begin() + b_start, B.begin() + b_end, local_result.begin());
+all_gatherv(comm, local_result.data(), proc.output_sizes[rank], output.data(), proc.output_sizes,
+        proc.output_displacements, 0);  
+\end{lstlisting}
+
+La funzione di merging funziona calcolando parallelamente tutti i corank degli elementi, infine applica il merge su pezzi di lista distinti, esegue il gather delle varie liste usando come displacement proprio gli indici calcolati dal corank e infine distribuisce il risultato a tutti i task.
+
+\begin{lstlisting}[language=c++,caption={Funzione di generazione dei subsets}]{cpp}
+std::vector<CopaSubset> subsets{CopaSubset{}};
+for (int item_idx = 0; const auto &item : items)
+{
+    decltype(subsets) shifted{subsets.size()};
+    auto [w, v] = item;
+    int local_size = static_cast<int>(shifted.size()) / comm.size();
+    int remainder = static_cast<int>(shifted.size()) % comm.size();
+    auto procedure = compute_scatter_procedure(comm, subsets);
+    std::vector<CopaSubset> local_shifted{static_cast<size_t>(procedure.sizes[comm.rank()]), CopaSubset{}};
+
+    // Distribute subsets to all processes for local shifting
+    scatterv(comm, subsets.data(), procedure.sizes, procedure.displacements, local_shifted.data(),
+                procedure.sizes[comm.rank()], 0);
+
+    for (int i = 0; i < static_cast<int>(local_shifted.size()); i++)
+    {
+        local_shifted[i].addItem(item_idx, w, v);
+    }
+    all_gatherv(comm, local_shifted.data(), procedure.sizes[comm.rank()], shifted.data(), procedure.sizes,
+            procedure.displacements, 0);
+    item_idx++;
+    std::vector<CopaSubset> newSubsets;
+    newSubsets.resize(subsets.size() + shifted.size());
+    mpi_parallel_merge(comm, subsets, shifted, newSubsets);
+    subsets = std::move(newSubsets);
+}
+if (reverse)
+    std::reverse(subsets);
+return subsets;
+\end{lstlisting}
+
+La funzione di generazione funziona in modo analogo alla sua controparte shared memory, si crea una lista shifted a partire da quella presente al passo precedente, si esegue lo scattering e ogni task aggiunge internamente al suo pezzo di lista l'oggetto, infine si esegue riunisce la lista e si procede alla funzione di merging parallelo.
+
+\subsubsection{Distribuzione dei blocchi ai processori}
+Anche in questo caso la funzione di distribuzione si comporta in modo analogo alla versione shared memory, ogni processore prende un subrange della lista di blocchi e lo salva cercando anche l'elemento di massimo profitto. La funzione non ritorna la lista ma la usa solo per cercare il massimo. 
+\begin{lstlisting}[language=c++,caption={Funzione di distribuzione dei blocchi}]{cpp}
+using value_type = std::ranges::range_value_t<decltype(input)>;
+// calculate the size of the blocks for the thread
+int n = static_cast<int>(std::ranges::size(input));
+int k = comm.size();
+int i = comm.rank();
+
+int block_size = n / k;
+int remainder = n % k;
+
+int start = i * block_size + std::min(i, remainder);
+int end = start + block_size + (i < remainder ? 1 : 0);
+auto span = std::ranges::subrange(std::ranges::begin(input) + start, std::ranges::begin(input) + end);
+int max_val = 0;
+for (const auto &elem : span)
+{
+    if (elem.totalValue > max_val)
+        max_val = elem.totalValue;
+}
+return {start, end, max_val};
+\end{lstlisting}
+
+Dopodichè i processi eseguono il pruning esattamente come nella versione shared memory.
+
+\subsubsection{Funzione completa}
+
+L'aspetto della funzione di calcolo completa è analogo alla versione shared memory, la lista di pesi e profitti viene divisa a metà in 2 liste A e B. Vengono generati i subset per ognuna delle due liste e viene invertito l'ordine per la seconda. Si distribuiscono i blocchi tra i processori e poi ogni processo effettua il pruning comparando i blocchi ad esso assegnati. Finito questo insieme di operazione ogni processo avrà trovato un suo massimo, a quel punto si effettua una reduce su tutte le soluzioni trovate e si prende quella di massimo profitto.
+
+\begin{lstlisting}[language=c++,caption={Funzione di distribuzione dei blocchi}]{cpp}
+int world = comm.size();
+int n = static_cast<int>(weights.size());
+std::vector<std::pair<int, int>> Alist, Blist;
+Alist.reserve(n / 2);
+Blist.reserve(n / 2);
+for (int i = 0; i < n / 2; ++i)
+    Alist.emplace_back(weights[i], values[i]);
+for (int i = n / 2; i < n; ++i)
+    Blist.emplace_back(weights[i], values[i]);
+auto A = mpi_generate_copa_subsets(comm, Alist);
+auto B = mpi_generate_copa_subsets(comm, Blist, true);
+int N = static_cast<int>(B.size());
+auto i = comm.rank();
+// Stage 2 : Parallel suffix max for B (MaxBj and Lj)
+CopaBlock blockA;
+std::vector<CopaBlock> blocksB(world);
+std::vector<CopaDistributionIndex> blockBdescriptors(world);
+auto blockAdesc = mpi_distribute_block_per_process(comm, A);
+auto blockBdesc = mpi_distribute_block_per_process(comm, B);
+boost::mpi::all_gather(comm, blockBdesc, blockBdescriptors.data());
+blockA.block = std::span(A).subspan(blockAdesc.start, blockAdesc.end - blockAdesc.start);
+blockA.maxValue = blockAdesc.maxValue;
+for (int i = 0; i < world; ++i)
+{
+
+    blocksB[i].block =
+        std::span(B).subspan(blockBdescriptors[i].start, blockBdescriptors[i].end - blockBdescriptors[i].start);
+    blocksB[i].maxValue = blockBdescriptors[i].maxValue;
+}
+// Note: we avoid communication during distribution, each node will only communicate the tasks to perform
+std::vector<std::pair<CopaBlock, CopaBlock>> local_remaining_pairs{};
+comm.barrier();
+prune_block_pair(blockA, blocksB, local_remaining_pairs, capacity, i);
+BlockPairSearchResult solution{};
+for (const auto &[remBlockA, remBlockB] : local_remaining_pairs)
+{
+    auto local_solution = block_pair_pointer_search(remBlockA, remBlockB, capacity);
+    if (local_solution.bestVal > solution.bestVal)
+    {
+        solution = local_solution;
+    }
+}
+BlockPairSearchResult best{};
+reduce(comm, solution,best,boost::mpi::maximum<BlockPairSearchResult>(),0);
+if (comm.rank() == 0)
+{
+    
+    // Reconstruct solution
+    KnapsackSolution solution{};
+    solution.totalValue = best.bestVal;
+    solution.totalWeight = A[best.bestAIdx].totalWeight + B[best.bestBIdx].totalWeight;
+    //auto items = (A[best.bestAIdx] << B[best.bestBIdx]).getItemIndices();
+    solution.items.reserve(items.size());
+    solution.items.insert(solution.items.end(), items.begin(), items.end());
+    return solution;
+}
+return {};
+\end{lstlisting}
+
+\subsubsection{Considerazioni finali sull'implementazione}
+L'implementazione è molto sperimentale e quindi non è sicuramente ottima, ci sono diversi approcci che si possono valutare per esprimere al meglio le capacità dell'algoritmo. Il primo è sicuramente quello di usare una forma più ibrida di calcolo distribuito, in cui ogni task è una farm di thread che collaborano tra di loro in shared memory. Per rendere gli algoritmi più facilmente utilizzabili è stato creato un wrapper python mediante Boost.python, che offre la possibilità di creare classi e funzioni leggibili e eseguibili direttamente dall'interprete, la misura del tempo viene effettuata mediante il modulo time di python, che espone sostanzialmente uno steady clock, azionando l'orologia prima di invocare la funzione C++ e subito dopo alla sua conclusione, per evitare problemi con l'instanza del comunicatore MPI si delega il requisito all'eseguibile python che lo instanzia quando si include la libreria Mpi4py.
+
+\subsubsection{Strumenti e opzioni di compilazione}
+La libreria è stata compilata con il compilatore GCC 15.2.0 usando il set di impostazioni di default Release presente in CMake 4.2.0 (quindi -O2 e -DNDEBUG a cui si aggiungono per default -ftree-vectorize e -ffast-math) , lo standard usato è C++23 con libstdc++11, l'interprete python è python 3.12.13
 
 \section{Risultati}
 
-\subsection{Knapsack DP}
+
+\subsection{Shared Memory}
+i due algoritmi in shared memory 
 
 \bibliographystyle{plain}
 \bibliography{biblio}
