@@ -86,32 +86,15 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	auto Alist = take(list, n / 2);
 	auto Blist = drop(list, n / 2);
 	std::vector<CopaSubset> A, B;
-	{
-		std::thread tA{[&]() {
-			A = time_block("generate_copa_subsets(Alist)", [&]() { return generate_copa_subsets(Alist, numThreads); });
-		}};
+	A = time_block("generate_copa_subsets(Alist)", [&]() { return generate_copa_subsets(Alist, numThreads); });
 
-		std::thread tB{[&]() {
-			B = time_block("generate_copa_subsets(Blist)",
-						   [&]() { return generate_copa_subsets(Blist, numThreads, true); });
-		}};
-
-		tA.join();
-		tB.join();
-	}
+	B = time_block("generate_copa_subsets(Blist)", [&]() { return generate_copa_subsets(Blist, numThreads, true); });
 	int N = static_cast<int>(B.size());
 	// Stage 2 : Parallel suffix max for B (MaxBj and Lj)
 	std::vector<CopaBlock> blocksA(numThreads);
 	std::vector<CopaBlock> blocksB(numThreads);
-
-	{
-		std::thread tA{[&]() { distribute_block_per_processor(A, blocksA, numThreads); }};
-
-		std::thread tB{[&]() { distribute_block_per_processor(B, blocksB, numThreads); }};
-		tA.join();
-		tB.join();
-	}
-	
+	distribute_block_per_processor(A, blocksA, numThreads);
+	distribute_block_per_processor(B, blocksB, numThreads);
 	// Stage 3: Parallel pruning
 	std::vector<std::pair<CopaBlock, CopaBlock>> remainingPairs;
 	time_block("prune blocks", [&]() { prune(blocksA, blocksB, remainingPairs, capacity, numThreads); });
@@ -120,7 +103,6 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	int k = static_cast<int>(remainingPairs.size());
 	int bestAIdx = 0, bestBIdx = 0, bestValue = 0;
 
-	
 	std::vector<int> localBestVal(k, 0);
 	std::vector<int> localBestAIdx(k, 0);
 	std::vector<int> localBestBIdx(k, 0);
@@ -128,14 +110,14 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	time_block("parallel save max",
 			   [&]() { parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k); });
 
-	// Reduce across all remaining pairs
-	#pragma omp parallel for num_threads(numThreads)
+// Reduce across all remaining pairs
+#pragma omp parallel for num_threads(numThreads)
 	for (int i = 0; i < k; ++i)
 	{
-		#pragma omp critical
+#pragma omp critical
 		if (localBestVal[i] > bestValue)
 		{
-			
+
 			bestValue = localBestVal[i];
 			bestAIdx = localBestAIdx[i];
 			bestBIdx = localBestBIdx[i];

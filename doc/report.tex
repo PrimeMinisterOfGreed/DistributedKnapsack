@@ -984,10 +984,104 @@ L'implementazione è molto sperimentale e quindi non è sicuramente ottima, ci s
 La libreria è stata compilata con il compilatore GCC 15.2.0 usando il set di impostazioni di default Release presente in CMake 4.2.0 (quindi -O2 e -DNDEBUG a cui si aggiungono per default -ftree-vectorize e -ffast-math) , lo standard usato è C++23 con libstdc++11, l'interprete python è python 3.12.13
 
 \section{Risultati}
-
+Prima dell'analisi dei risultati, bisogna tenere a mente alcune premesse. La prima, la più importante, è che l'algoritmo COPA proposto non può funzionare con più di 50 oggetti, questo vincolo comunque non è particolarmente oneroso per l'analisi, visto che comunque nella versione DP dell'algoritmo si può parallelizzare solo sul ciclo più interno, la cui lunghezza dipende dalla capacità. La seconda è che nel caso di un algoritmo MPI , un implementazione puramente distribuita è sicuramente molto più inefficiente di una ibrida, che però richiederebbe degli accorgimenti ulteriori per essere implementata.
 
 \subsection{Shared Memory}
-i due algoritmi in shared memory 
+i due algoritmi in shared memory hanno efficacia profondamente diversa.
+
+\subsubsection{Knapsack DP}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{images/t_c_p_shared.png}
+\caption{Confronto dei tempi di esecuzione per gli algoritmi shared memory al variare del numero di thread.}
+\label{fig:tcpshared}
+\end{figure}
+
+Dal grafico soprastante si osserva innanzitutto che, superata una certa capacit\`a, i tempi di esecuzione dell'algoritmo DP crescono rapidamente, mentre quelli del COPA rimangono sostanzialmente costanti: questo \`e dovuto al fatto che la complessit\`a del DP dipende dal prodotto $N \times C$ (con $C$ la capacit\`a dello zaino), mentre il COPA dipende solo dal numero di elementi $N$, generando $2^{N/2}$ sottoinsiemi indipendentemente dalla capacit\`a.
+
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{images/KnapsackDP_Speedup.png}
+\caption{Speedup dell'algoritmo KPDP in shared memory}
+\label{fig:kpdpshared}
+\end{figure}
+
+Lo speedup nel caso della versione in dynamic programming come ci si potrebbe aspettare cresce un pò con l'aumentare massiccio dei threads, questo diviene particolarmente vero quando la capacità è molto alta, sopratutto perchè a quel punto il ciclo interno sarà quello con più lavoro da eseguire. Questo comportamento smette di verificarsi quando non ci sono abbastanza elementi da poter giustificare l'instanziazione di tutti quei thread e quindi si perde di efficacia, ciò è verificabile meglio nel plot sottostante
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{images/KnapsackDP_speedupplot.png}
+\caption{Speedup plot dell'algoritmo KP in DP}
+\label{fig:kpdpsharedplot}
+\end{figure}
+
+In questo grafico sono riportati diversi speedup a seconda della capacità, si vede subito comunque che l'algoritmo scala bene solo con i primi threads e solo quando la capacità supera una certa soglia. Diventa ancora più evidente se si osserva il grafico dell'efficienza 
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{images/KnapsackDP_Efficiency.png}
+\caption{Efficienza dell'algoritmo KP in DP}
+\label{fig:kpdpsharedefficiency}
+\end{figure}
+
+\subsubsection{Knapsack COPA}
+
+Nell'algoritmo COPA si può osservare invece che lo speedup cresce molto rapidamente all'aumentare dei processori ma decresce subito superata una certa soglia
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{images/KnapsackCOPA_Speedup.png}
+\caption{Speedup dell'algoritmo KP COPA in shared memory}
+\label{fig:kpcopaspeedup}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{images/KnapsackCOPA_speedupplot.png}
+\caption{Speedup dell'algoritmo KP COPA in shared memory}
+\label{fig:kpcopaplot}
+\end{figure}
+
+Non bisogna sorprendersi della discesa repentina dello speedup all'aumentare dei processori, l'algoritmo presenta infatti una peculiarità: ovvero che potrebbe scalare meglio con un numero di elementi più alto, sfortunatamente il numero di soluzioni generate durante lo step di creazione dei subsets lo rende proibitivo a livello di memoria richiesta, visto che lo spazio occupato è $2^n$ elementi. Le linee a capacità bassa che segnano invece uno speedup di 1.4 sono perlopiù falsi positivi dovuti alla chiusura praticamente immediata del job vista l'assenza di coppie valutabili durante la fase di pruning. Ovviamente questo comportamento si riflette sull'efficienza che decresce repentinamente e sui costi che salgono rapidamente sopratutto oltre i 20 processori.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{images/KnapsackCOPA_Cost.png}
+\caption{Costo dell'algoritmo KP COPA in shared memory}
+\label{fig:kpcopacost}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{images/KnapsackCOPA_Efficiency.png}
+\caption{Efficienza dell'algoritmo KP COPA in shared memory}
+\label{fig:kpcopaefficiency}
+\end{figure}
+
+
+\subsubsection{Knapsack DP vs COPA}
+
+Mettendo a confronto i due algoritmi si può osservare che, utilizzando l'algoritmo COPA nelle giuste configurazioni si possono ottenere benefici considerevoli in termini di speedup a un costo contenuto in termini di processori impiegati.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{images/knapsackdpvscopashared.png}
+\caption{Speedup dell'algoritmo KP COPA vs DP}
+\label{fig:kpcopavsdp}
+\end{figure}
+
+Come si può osservare dal grafico, l'algoritmo in dynamic programming vince sostanzialmente in tutte quelle configurazioni in cui la capacità è più piccola di una certa soglia, sotto il $10^7$, mentre invece per configurazioni in cui la capacità è molto grande COPA è molto più veloce. Questo conferma quanto scritto nell'articolo in cui si presenta proprio questa soluzione al problema dello zaino, va detto comunque che la limitazione d'uso a cui si è sottoposti è importante, visto che non è possibile calcolare soluzioni per insiemi più grandi di 50 elementi. 
+
+
+\subsection{Distributed Memory}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{images/knapsackdp_mpi_mpi.png}
+\caption{Speedup degli algoritmi in distributed memory}
+\label{fig:kpcopadpmpi}
+\end{figure}
 
 \bibliographystyle{plain}
 \bibliography{biblio}

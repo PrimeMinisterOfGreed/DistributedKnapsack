@@ -1,9 +1,7 @@
 #include "knapsackmpi.hpp"
-#include "options_bag.hpp"
 #include <boost/mpi.hpp>
 #include <boost/serialization/access.hpp>
 #include <boost/serialization/vector.hpp>
-#include <deque>
 #include <spdlog/spdlog.h>
 #include <vector>
 
@@ -55,80 +53,52 @@ static KnapsackSolution maintask(boost::mpi::communicator &comm, const std::vect
 	using namespace boost::mpi;
 	int n = static_cast<int>(weights.size());
 	int num_workers = comm.size() - 1;
-	int chunk_size = (capacity + 1) / num_workers;
-	SPDLOG_DEBUG("[mainnode] starting: n={}, capacity={}, workers={}, chunk_size={}", n, capacity, num_workers,
-				 chunk_size);
 
 	std::vector<std::vector<uint32_t>> dp(n + 1, std::vector<uint32_t>(capacity + 1, 0));
 
 	for (int i = 1; i <= n; ++i)
 	{
 		SPDLOG_DEBUG("[mainnode] item {}: broadcasting dp[{}] (size {})", i, i - 1, capacity + 1);
-		broadcast(comm, dp[i - 1].data(), capacity+1, 0);
+		broadcast(comm, dp[i - 1].data(), capacity + 1, 0);
 		SPDLOG_DEBUG("[mainnode] item {}: broadcast complete", i);
-		int actual_index = 0;
-		int active = 0;
-		auto generator = [capacity, chunk_size,&actual_index,&active]() -> std::optional<NodeTask> {
-			if (actual_index > capacity)
-			{
-				return std::nullopt;
-			}
-			int start = actual_index;
-			int end = std::min(actual_index + chunk_size - 1, capacity);
-			actual_index = end + 1;
-			active++;
-			return NodeTask{start, end};
-		};
 
+		int chunk_size = std::max(1, (capacity + num_workers) / num_workers);
+		int in_flight = 0;
 
 		for (int rank = 1; rank <= num_workers; ++rank)
 		{
-			auto task = generator();
-			if (!task.has_value())
-			{
+			int start = (rank - 1) * chunk_size;
+			int end = std::min(rank * chunk_size - 1, capacity);
+			if (start > end)
 				break;
-			}
-			SPDLOG_DEBUG("[mainnode] item {}: sending TASK[{},{}] to rank {}", i, task->startIndex, task->endIndex, rank);
-			comm.send(rank, NODETAG::TASK, task.value());
+			SPDLOG_DEBUG("[mainnode] item {}: sending TASK[{},{}] to rank {}", i, start, end, rank);
+			comm.send(rank, NODETAG::TASK, NodeTask{start, end});
+			++in_flight;
 		}
-		SPDLOG_DEBUG("[mainnode] item {}: {} tasks sent initially, {} remaining", i, in_flight, tasks.size());
-		while (active > 0)
+
+		while (in_flight > 0)
 		{
 			NodeResponse resp{};
 			NodeResponseData data;
-			SPDLOG_DEBUG("[mainnode] item {}: waiting for RESPONSE (any_source)", i);
 			auto status = comm.recv(any_source, NODETAG::RESPONSE, resp);
-			SPDLOG_DEBUG("[mainnode] item {}: got RESPONSE from rank {}, start={}, end={}", i, status.source(),
-						 resp.startIndex, resp.endIndex);
-
-			SPDLOG_DEBUG("[mainnode] item {}: receiving DATA from rank {}", i, status.source());
 			comm.recv(status.source(), NODETAG::DATA, data);
-			SPDLOG_DEBUG("[mainnode] item {}: received DATA, line.size={}", i, data.line.size());
-			active--;
+			--in_flight;
+
+			SPDLOG_DEBUG("[mainnode] item {}: received chunk [{},{}] from rank {}", i,
+					resp.startIndex, resp.endIndex, status.source());
+
 			for (int w = resp.startIndex; w <= resp.endIndex; ++w)
-			{
-				dp[i][w] = data.line[w];
-			}
-			auto task = generator();
-			if (task.has_value())
-			{
-				SPDLOG_DEBUG("[mainnode] item {}: sending next TASK[{},{}] to rank {}", i, task->startIndex,
-							 task->endIndex, status.source());
-				comm.send(status.source(), NODETAG::TASK, task.value());
-				SPDLOG_DEBUG("[mainnode] item {}: posted irecv for rank {}", i, status.source());
-			}
+				dp[i][w] = data.line[w - resp.startIndex];
 		}
-		SPDLOG_DEBUG("[mainnode] item {}: all tasks complete, sending TERMINATE", i);
 
 		for (int rank = 1; rank <= num_workers; ++rank)
-		{
-			NodeResponse resp{};
 			comm.send(rank, NODETAG::TERMINATE, NodeTask{0, 0});
-		}
-		SPDLOG_DEBUG("[mainnode] item {}: done", i);
+
 		comm.barrier();
 	}
+
 	SPDLOG_DEBUG("[mainnode] DP complete, optimal value = {}", dp[n][capacity]);
+
 	KnapsackSolution solution;
 	solution.totalValue = dp[n][capacity];
 	solution.totalWeight = 0;
@@ -149,38 +119,37 @@ static void workertask(boost::mpi::communicator &comm, const std::vector<int> &w
 {
 	using namespace boost::mpi;
 	int n = static_cast<int>(weights.size());
-	std::vector<uint32_t> line;
+	std::vector<uint32_t> line(capacity + 1, 0);
 
 	for (int i = 1; i <= n; ++i)
 	{
-		line.clear();
-		line.resize(capacity + 1, 0);
-		SPDLOG_DEBUG("[workernode] item {}: waiting for broadcast of dp[{}]", i, i - 1);
-		SPDLOG_DEBUG("[workernode] item {}: received row_size = {}", i, row_size);
-		broadcast(comm, line.data(),line.size(), 0);
+		SPDLOG_DEBUG("[workernode] item {}: waiting for broadcast", i);
+		broadcast(comm, line.data(), static_cast<int>(line.size()), 0);
+		SPDLOG_DEBUG("[workernode] item {}: received broadcast", i);
 
-		for(;;)
+		while (true)
 		{
 			NodeTask task{};
 			auto status = comm.recv(any_source, any_tag, task);
 
 			if (status.tag() == NODETAG::TERMINATE)
 			{
-				SPDLOG_DEBUG("[workernode] item {}: received TERMINATE from rank {}", i, status.source());
+				SPDLOG_DEBUG("[workernode] item {}: received TERMINATE", i);
 				break;
 			}
 
-			auto prev = line;
+			int len = task.endIndex - task.startIndex + 1;
+			std::vector<uint32_t> result(len);
 			for (int w = task.startIndex; w <= task.endIndex; ++w)
 			{
 				if (weights[i - 1] <= w)
-				{
-					line[w] = std::max(prev[w], prev[w - weights[i - 1]] + values[i - 1]);
-				}
+					result[w - task.startIndex] = std::max(line[w], line[w - weights[i - 1]] + values[i - 1]);
+				else
+					result[w - task.startIndex] = line[w];
 			}
 
 			comm.send(status.source(), NODETAG::RESPONSE, NodeResponse{task.startIndex, task.endIndex});
-			comm.send(status.source(), NODETAG::DATA, NodeResponseData{line});
+			comm.send(status.source(), NODETAG::DATA, NodeResponseData{std::move(result)});
 		}
 		comm.barrier();
 	}
@@ -190,10 +159,7 @@ std::optional<KnapsackSolution> knapsackdpmpi(boost::mpi::communicator &comm, co
 											  const std::vector<int> &values, int capacity)
 {
 	if (comm.rank() == 0)
-	{
-
 		return {maintask(comm, weights, values, capacity)};
-	}
 	else
 	{
 		workertask(comm, weights, values, capacity);

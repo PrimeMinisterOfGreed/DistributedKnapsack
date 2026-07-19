@@ -4,3 +4,4 @@
 CMakeCustomPreset.json
 **/__pycache__
 *.csv
+*.png
