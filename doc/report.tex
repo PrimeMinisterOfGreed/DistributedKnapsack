@@ -370,7 +370,7 @@ l'algoritmo di merging parallelo si articola nel modo seguente: prende in input 
 A questo punto si può passare a dividere equamente tra i processori disponibili i blocchi ottenuti e calcolare per ognuno di questi blocchi gli elementi di profitto massimo. 
 
 \begin{algorithm}[H]
-\caption{ALgoritmo di divisione e ricerca dei massimi profitto per blocco}\label{alg:parallel_max}
+\caption{ALgoritmo di divisione e ricerca del massimo profitto per blocco}\label{alg:parallel_max}
 \begin{algorithmic}
 \Require Due liste ordinate $A$ e $B$
 \Ensure $MaxA$ e $MaxB$
@@ -439,7 +439,7 @@ A questo punto è possibile passare alla ricerca parallela della soluzione. L'al
 
 \subsubsection{Secondo salvataggio parallelo dei massimi}
 Dopo il pruning, al più $2k-1$ coppie di blocchi vengono distribuite equamente tra i $k$ processori: ogni processore $P_i$ gestisce al massimo $s \leq 2$ coppie. Per ogni blocco $B_{it}$ assegnato, si calcola un array di \textit{suffix max}: $
-Max_{i:j}[t]$ rappresenta il profitto massimo tra tutti gli elementi da posizione $j$ a $e$ del blocco $B_{it}$, mentre $L^t_j$ registra l'indice dell'elemento che realizza tale massimo.
+Max_{i:j}[t]$ rappresenta il profitto massimo tra tutti gli elementi da posizione $j$ a $e$ del blocco $B_{it}$, mentre $L^t_j$ rappresenta l'indice del massimo trovato.
 
 \begin{algorithm}[H]
 \caption{Secondo salvataggio parallelo dei massimi (suffix max)}\label{alg:parallel_suffix_max}
@@ -499,13 +499,13 @@ Ciascun processore esegue una ricerca \textit{two-pointer} sulle proprie coppie 
 \end{algorithmic}
 \end{algorithm}
 
-La logica è la seguente: poiché $A_i$ è ordinato per peso crescente e $B_{it}$ per peso decrescente, quando la somma dei pesi supera la capacità $c$, si incrementa $y$ per passare a un elemento più leggero in $B$. Quando invece la somma è ammissibile, il profitto candidato si calcola come $a_{i:x}.p + Max_{i:y}[t]$, dove $Max_{i:y}[t]$ — grazie al pre-calcolo dei suffix max — rappresenta il miglior profitto ottenibile da $y$ in poi nel blocco $B_{it}$. Questo evita di dover iterare su tutte le coppie di elementi, riducendo la complessità a $O(e) = O(N/k)$.
+La logica è la seguente: poiché $A_i$ è ordinato per peso crescente e $B_{it}$ per peso decrescente, quando la somma dei pesi supera la capacità $c$, si incrementa $y$ per passare a un elemento più leggero in $B$. Quando invece la somma è ammissibile, il profitto candidato si calcola come $a_{i:x}.p + Max_{i:y}[t]$, dove $Max_{i:y}[t]$ rappresenta il miglior profitto ottenibile da $y$ in poi nel blocco $B_{it}$. Questo evita di dover iterare su tutte le coppie di elementi, riducendo la complessità a $O(e) = O(N/k)$.
 
 La complessità complessiva dello stage di ricerca parallela è $O(4N/k + k)$, che nel caso $k = O(N^{1/2})$ diventa $O(2^{n/4})$.
 
 \section{Implementazione dell'esperimento}
 
-l'esperimento si divide in 4 parti distinte: 1) l'implementazione del algoritmo di risoluzione del knapsack con programmazione dinamica: questo metodo è quello più didattico e semplice da implementare, proprio per questo è usato come base per verificare la corretta implementazione negli unit test degli algoritmi successivi. 2) Implementazione dell'algoritmo con programmazione dinamica in MPI 3) Implementazione dell'algoritmo COPA sequenziale e parallelo in shared memory usando OpenMP. 4) Implementazione dell'algoritmo COPA distribuito usando MPI 
+l'esperimento si divide in 4 parti distinte: 1) l'implementazione del algoritmo di risoluzione del knapsack con programmazione dinamica: questo metodo è quello più semplice da implementare ed è stato usato come base per verificare la corretta implementazione negli unit test degli algoritmi successivi. 2) Implementazione dell'algoritmo con programmazione dinamica in MPI 3) Implementazione dell'algoritmo COPA sequenziale e parallelo in shared memory usando OpenMP. 4) Implementazione dell'algoritmo COPA distribuito usando MPI 
 
 \subsection{Implementazione del knapsack in dynamic programming}
 
@@ -526,34 +526,44 @@ for (int i = 1; i <= n; ++i) {
 }
 \end{lstlisting}
 
-Questo algoritmo ha una complessità di O(N*C) dove C è la capacità dello zaino, la parallelizzazione avviene scomponendo il ciclo for interno che scrive i valori nella tabella, non si può parallelizzare il ciclo for più esterno perchè per risolvere la linea successiva bisogna prima calcolare tutti i valori per quella precedente. 
+Questo algoritmo ha una complessità di $O(N*C)$ dove C è la capacità dello zaino, la parallelizzazione avviene scomponendo il ciclo for interno che scrive i valori nella tabella, non è possibile invece parallelizzare il ciclo for più esterno perchè per risolvere la linea successiva bisogna prima calcolare tutti i pesi di quella precedente. 
 
 \subsubsection{Implementazione MPI}
-L'implementazione MPI dell'algoritmo è molto simile, l'approccio seguito è stato quello di assegnare la tabella a un master, che scompone la linea successiva da calcolare in task di una certa dimensione, i worker non dispongono dell'intera tabella ma solo della linea precedente.
+L'implementazione MPI dell'algoritmo è molto simile, l'approccio seguito è stato quello di assegnare la tabella a un master, che scompone la linea successiva da calcolare in task di equa lunghezza da distribuire ai vari worker.
 
 \begin{lstlisting}[caption={Worker task},language=c++]{cpp}
-int n = static_cast<int>(weights.size());
-std::vector<uint32_t> prev;
-for (int i = 1; i <= n; ++i)
-{
-    broadcast(MPI_COMM_WORLD,prev,0); //broadcast the previous line from master
-    while(!terminate_sent_from_master)
-    {
-    NodeTask task = comm.recv(any_source,tag::task);
-    for (int w = task.startIndex; w <= task.endIndex; ++w)
-        {
-            if (weights[i - 1] <= w)
-            {
-                line[w] = std::max(prev[w], prev[w - weights[i - 1]] + values[i - 1]);
-            }
-        }
-    comm.send(Response{task,line},0);
-    }
-    comm.barrier();
-}
+	using namespace boost::mpi;
+	int n = static_cast<int>(weights.size());
+	std::vector<uint32_t> line(capacity + 1, 0);
+	for (int i = 1; i <= n; ++i)
+	{
+		broadcast(comm, line.data(), static_cast<int>(line.size()), 0);
+		while (true)
+		{
+			NodeTask task{};
+			auto status = comm.recv(any_source, any_tag, task);
+			if (status.tag() == NODETAG::TERMINATE)
+			{
+				break;
+			}
+			int len = task.endIndex - task.startIndex + 1;
+			std::vector<uint32_t> result(len);
+			for (int w = task.startIndex; w <= task.endIndex; ++w)
+			{
+				if (weights[i - 1] <= w)
+					result[w - task.startIndex] = std::max(line[w], line[w - weights[i - 1]] + values[i - 1]);
+				else
+					result[w - task.startIndex] = line[w];
+			}
+
+			comm.send(status.source(), NODETAG::RESPONSE, NodeResponse{task.startIndex, task.endIndex});
+			comm.send(status.source(), NODETAG::DATA, NodeResponseData{std::move(result)});
+		}
+		comm.barrier();
+	}
 \end{lstlisting}
 
-Il master invece possiede la tabella e distribuisce i diversi task ai diversi worker, i task sono dei range di indici che il worker deve computare, una volta finito il worker invia al master il blocco appena computato e si mette in attesa di un nuovo task, se non ve ne sono più il master invia un messaggio di terminazione ai worker che finiscono per quel ciclo di stare in attesa. La chunk size per i task è passata come argomento oppure è calcolata a partire dalla numerosità degli elementi nella riga, in modo che ogni processore non debba operare su più di 1000 elementi per volta.
+i task sono dei range di indici che il worker deve computare, una volta finito il worker invia al master il blocco appena computato dopodichè il worker attende tutti i nodi alla barriera e si comincia il calcolo per il prossimo oggetto.
 
 \begin{lstlisting}[caption={Master Task},language=c++]{cpp}
 int n = static_cast<int>(weights.size());
@@ -586,11 +596,11 @@ for (int i = 1; i <= n; ++i)
 }
 \end{lstlisting}
 
-terminati i cicli il master può leggere dalla DP il risultato. Si evince subito che l'implementazione MPI è piuttosto semplice e segue uno schema molto simile alla versione Shared Memory, tuttavia presenta lo svantaggio di dover comunicare almeno la linea precedente in DP a tutti i worker. Svantaggio che si avrebbe comunque anche nel caso della versione più didattica, in cui non esiste la DP perchè non si esegue il backtracking per ricostruire gli oggetti scelti, ma si calcola solo il profitto massimo ottenibile. In questo caso infatti, per calcolare la linea successiva della DP è necessario conoscere la linea precedente, quindi anche in questo caso si dovrebbe comunicare a tutti i worker la linea precedentemente calcolata. 
+terminati i cicli il master può leggere dalla DP il risultato. Si evince subito che l'implementazione MPI è piuttosto semplice e segue uno schema molto simile alla versione Shared Memory, tuttavia presenta lo svantaggio di dover comunicare la linea calcolata a tutti i worker. Svantaggio che si avrebbe comunque anche nel caso della versione più ottimizzata, in cui non esiste la DP perchè non si esegue il backtracking per ricostruire gli oggetti scelti, ma si calcola solo il profitto massimo ottenibile. In questo caso infatti, per calcolare la linea successiva della DP è necessario conoscere la linea precedente, quindi anche in questo caso si dovrebbe comunicare a tutti i worker la linea precedentemente calcolata. 
 
 \subsection{Knapsack COPA}
 
-La versione COPA dell'algoritmo è stata pensata per essere eseguita in shared memory e per ovviare a un problema della versione in dynamic programming dell'algoritmo, cioè che la grandezza della tabella cresce con l'aumentare della capacità dello zaino. Invece nella versione COPA il numero di soluzioni da esplorare è sostanzialmente legato al solo numero degli elementi, tuttavia questo insieme cresce con un ritmo di $2^{n/2}$, quindi per un numero di elementi superiore a 40-50 il numero di combinazioni diventa proibitivo da memorizzare (come anche sottolineato nell'articolo originale). Visto che tutti gli algoritmi hanno come dipendenza la funzione di generazione delle soluzioni, si può partire da li.
+La versione COPA dell'algoritmo è stata pensata per essere eseguita in shared memory e per ovviare a un problema della versione in dynamic programming dell'algoritmo, cioè che la grandezza della tabella cresce con l'aumentare della capacità dello zaino. Invece nella versione COPA il numero di soluzioni da esplorare è perlopiù legato al numero degli elementi, tuttavia questo insieme cresce con un ritmo di $2^{n/2}$, quindi per un numero di elementi superiore a 40-50 il numero di combinazioni diventa proibitivo da memorizzare (come anche sottolineato nell'articolo originale).
 
 \subsubsection{Algoritmo di generazione dei sottoinsiemi}
 I sottoinsiemi sono generati partendo dalla lista generale, dividendola in due e generando a partire dalle due liste spezzate un insieme di sottoinsiemi di soluzioni. L'algoritmo si articola in due fasi: 1) copia della lista precedente e aggiunta dell'elemento a ogni insieme 2) merging della nuova lista con quella precedente usando l'algoritmo di coranking.
@@ -997,7 +1007,7 @@ i due algoritmi in shared memory hanno efficacia profondamente diversa.
 \label{fig:tcpshared}
 \end{figure}
 
-Dal grafico soprastante si osserva innanzitutto che, superata una certa capacit\`a, i tempi di esecuzione dell'algoritmo DP crescono rapidamente, mentre quelli del COPA rimangono sostanzialmente costanti: questo \`e dovuto al fatto che la complessit\`a del DP dipende dal prodotto $N \times C$ (con $C$ la capacit\`a dello zaino), mentre il COPA dipende solo dal numero di elementi $N$, generando $2^{N/2}$ sottoinsiemi indipendentemente dalla capacit\`a.
+Dal grafico soprastante si osserva innanzitutto che, superata una certa capacità, i tempi di esecuzione dell'algoritmo DP crescono rapidamente, mentre quelli del COPA rimangono sostanzialmente costanti: questo è dovuto al fatto che la complessità del DP dipende dal prodotto $N \times C$ (con $C$ la capacità dello zaino), mentre il COPA dipende solo dal numero di elementi $N$, generando $2^{N/2}$ sottoinsiemi indipendentemente dalla capacità.
 
 
 \begin{figure}[H]
@@ -1076,12 +1086,27 @@ Come si può osservare dal grafico, l'algoritmo in dynamic programming vince sos
 
 \subsection{Distributed Memory}
 
+Entrambi gli algoritmi, come si può osservare nel grafico, funzionano molto male quando si utilizzano in memoria distribuita. 
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{images/knapsackdp_mpi_mpi.png}
 \caption{Speedup degli algoritmi in distributed memory}
 \label{fig:kpcopadpmpi}
 \end{figure}
+
+Nel caso dell'algoritmo in dynamic programming, la motivazione è semplice da individuare: il broadcast della riga ad ogni iterazione comporta un costo alto in termini di tempi di comunicazione. Supponendo di usare un intero a 32 bit, quindi 4 byte, per rappresentare il vettore di pesi e il vettore dei profitti, se si suppone una lunghezza di $10^8$ elementi bisogna trasferire circa 381 Mb ogni volta solo per il broadcast e altrettanti per eseguire il gathering e lo scattering del prossimo vettore da calcolare, rendendo questo algoritmo altamente memory bound. La versione COPA invece non presenta questo problema durante il calcolo, purtroppo durante la fase di generazione dei subsets rende il processo memory bound almeno inizialmente, visto che per ogni elemento è necessario scambiarsi tutta la lista di subsets generati, supponendo di usare 3 interi a 32 bit per rappresentare profitto, peso e indice del blocco servono $2^{\frac{n}{2}}*4*3*2$ al passo finale per entrambe le liste, per cui in totale bisogna trasferire $\sum_{i=1}^{n}2^{\frac{i}{2}}*4*3*2$, misura che diventa considerevolmente grande una volta che il numero di elementi diventa abbastanza grande, rendendo di fatto l'algoritmo nuovamente memory bound.
+
+\subsubsection{Possibili miglioramenti}
+
+L'approccio a memoria condivisa utilizzato è molto vicino a quello ottimale, usando un dispositivo come una GPU sarebbero possibili accorgimenti ulteriori per migliorare l'efficienza: l'approccio COPA è infatti stato pensato proprio per un approccio GPU oriented, per esempio nella fase di generazione dei subset sarebbe possibile, avendo abbastanza core a disposizione, aggiungere in pochi step l'elemento corrente a tutti gli elementi della lista shifted. Con opportuni accorgimenti potrebbe essere possibile utilizzare
+direttamente la versione OpenMP eseguendo offloading a un dispositivo GPU, oppure si potrebbe usare OpenACC per ottenere il medesimo risultato. 
+
+Nell'approccio a memoria distribuita le modifiche possibili sono invece più sostanziose e porterebbero sicuramente a incrementi non banali in termini di prestazioni, prima di tutto l'implementazione di un approccio puramente a memoria distribuita , come si è osservato , porta inevitabilmente al dilatamento dei tempi a causa degli elevati tempi di trasmissione, inoltre nessuno di questi algoritmi è stato pensato per funzionare con un approccio a memoria distribuita ma entrambi per la memoria condivisa. Tuttavia sono comunque possibili dei miglioramenti, in entrambe le versioni invece di adottare una strategia puramente a memoria distribuita si può tentare un approccio ibrido, in cui ai task vengono date più cpu per effettuare operazioni in memoria condivisa, consentendo così di distribuire in modo più grossolano i task e evitando ritardi dovuti alle distribuzioni granulari che avvengono adesso, come i broadcast o gli all\_gather utilizzati per condividere quei dati che costituiscono una dipendenza per i passi successivi dell'algoritmo in questione.
+
+\subsection{Conclusioni}
+
+Lo scopo primario del progetto era comprendere a pieno la difficoltà di implementazione dell'algoritmo e il beneficio ottenibile. L'approccio shared memory ha mostrato di essere promettente, sopratutto per quanto riguarda l'approccio COPA. Tuttavia proprio quell'approccio è assolutamente inutilizzabile nel mondo embedded, dove la memoria è una risorsa molto scarsa e quindi determinati approcci non sono possibili. Comunque se si utilizzasse invece per implementare un ottimizzazione da terra da poi usare in orbita, potrebbe rivelarsi una scelta molto promettende per tutti quei problemi che hanno un vincolo di capacità molto elevato con valori di pesi sugli oggetti estremamente variabili tra di loro. 
 
 \bibliographystyle{plain}
 \bibliography{biblio}
