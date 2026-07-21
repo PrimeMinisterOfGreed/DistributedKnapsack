@@ -19,5 +19,6 @@
         "--header-insertion=never",
         "--query-driver=g++-15",
     ],
-    "clangd.path": "clangd-23"
+    "clangd.path": "clangd-23",
+    "latex-workshop.latex.outDir": "./build"
 }

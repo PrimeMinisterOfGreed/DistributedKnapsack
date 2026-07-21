@@ -316,6 +316,11 @@ struct BlockPairSearchResult
 	{
 		return bestVal > other.bestVal;
 	}
+
+	virtual bool operator<(const BlockPairSearchResult &other) const
+	{
+		return bestVal < other.bestVal;
+	}
 };
 
 constexpr BlockPairSearchResult block_pair_pointer_search(const CopaBlock &blockA, const CopaBlock &blockB,
