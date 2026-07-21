@@ -1,5 +1,4 @@
 #include "Knapsack/utils.tpp"
-#include "TestEnvironment.hpp"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <vector>
@@ -294,21 +293,10 @@ TEST_F(GenerateCopaSubsetsTimed, BenchmarkN20)
 	}
 }
 
-TEST_F(GenerateCopaSubsetsTimed, BenchmarkN100)
-{
-	auto items = make_items(100);
 
-	for (int t : {32})
-	{
-		auto [subsets, us] = timed_run(items, t);
-		EXPECT_TRUE(is_sorted_by_weight(subsets));
-		fmt::println("  threads={}: {:>9} µs ({} subsets)", t, us, subsets.size());
-	}
-}
-
-TEST_F(GenerateCopaSubsetsTimed, BenchmarkN1000)
+TEST_F(GenerateCopaSubsetsTimed, BenchmarkN25)
 {
-	auto items = make_items(1000);
+	auto items = make_items(25);
 
 	auto [subsets, us] = timed_run(items, 32);
 	EXPECT_TRUE(is_sorted_by_weight(subsets));

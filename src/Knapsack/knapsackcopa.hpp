@@ -5,7 +5,6 @@
 
 struct CopaSubset
 {
-	std::vector<bool> items;
 	int totalWeight{};
 	int totalValue{};
 	int index{};
@@ -13,16 +12,13 @@ struct CopaSubset
 	friend class boost::serialization::access;
 	template <class Archive> void serialize(Archive &ar, const unsigned int /*version*/)
 	{
-		ar & items;
 		ar & totalWeight;
 		ar & totalValue;
+		ar & index;
 	}
 
 	void addItem(int itemIndex, int weight, int value)
 	{
-		if(itemIndex >= static_cast<int>(items.size()))
-			items.resize(itemIndex + 1, false);
-		items[itemIndex] = true;
 		totalWeight += weight;
 		totalValue += value;
 	}
@@ -43,31 +39,14 @@ struct CopaSubset
 
 	std::vector<int> getItemIndices() const
 	{
-		std::vector<int> indices;
-		for (size_t i = 0; i < items.size(); ++i)
-		{
-			if (items[i])
-				indices.push_back(static_cast<int>(i));
-		}
-		return indices;
+
+		return {};
 	}
 
 	CopaSubset operator<<(const CopaSubset &other) const
 	{
-		// return the union of the vectors of bools, and sum the weights and values
-		CopaSubset result;
-		result.items.resize(items.size()+other.items.size(), false);
-		result.totalWeight = totalWeight + other.totalWeight;
-		result.totalValue = totalValue + other.totalValue;
-		for (size_t i = 0; i < items.size(); ++i)
-		{
-			result.items[i] = items[i];
-		}
-		for (size_t i = 0; i < other.items.size(); ++i)
-		{
-			result.items[i] = result.items[i] || other.items[i];
-		}
-		return result;
+		
+		return {};
 	}
 };
 

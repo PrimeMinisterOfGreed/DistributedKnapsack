@@ -61,30 +61,25 @@ std::optional<KnapsackSolution> knapsackcopampi(boost::mpi::communicator &comm, 
 	prune_block_pair(blockA, blocksB, local_remaining_pairs, capacity, i);
 	spdlog::debug("Process {} has pruned block pairs, remaining pairs: {}", i, local_remaining_pairs.size());
 
-	if (local_remaining_pairs.size() > 1)
-	{
-		spdlog::warn("Process {} has {} remaining pairs after pruning, this may lead to load imbalance", i,
-					 local_remaining_pairs.size());
-	}
 	BlockPairSearchResult solution{};
-	if (!local_remaining_pairs.empty())
+	for (const auto &[remBlockA, remBlockB] : local_remaining_pairs)
 	{
-		auto [remBlockA, remBlockB] = local_remaining_pairs[0];
-		solution = block_pair_pointer_search(remBlockA, remBlockB, capacity);
+		auto local_solution = block_pair_pointer_search(remBlockA, remBlockB, capacity);
+		if (local_solution.bestVal > solution.bestVal)
+		{
+			solution = local_solution;
+		}
 	}
-	std::vector<BlockPairSearchResult> all_solutions(world);
-	gather(comm, solution, all_solutions, 0);
+	BlockPairSearchResult best{};
+	reduce(comm, solution,best,boost::mpi::maximum<BlockPairSearchResult>(),0);
 	if (comm.rank() == 0)
 	{
-		auto best = std::max_element(
-			all_solutions.begin(), all_solutions.end(),
-			[](const BlockPairSearchResult &a, const BlockPairSearchResult &b) { return a.bestVal < b.bestVal; });
-
+		
 		// Reconstruct solution
 		KnapsackSolution solution{};
-		solution.totalValue = best->bestVal;
-		solution.totalWeight = A[best->bestAIdx].totalWeight + B[best->bestBIdx].totalWeight;
-		auto items = (A[best->bestAIdx] << B[best->bestBIdx]).getItemIndices();
+		solution.totalValue = best.bestVal;
+		solution.totalWeight = A[best.bestAIdx].totalWeight + B[best.bestBIdx].totalWeight;
+		auto items = (A[best.bestAIdx] << B[best.bestBIdx]).getItemIndices();
 		solution.items.reserve(items.size());
 		solution.items.insert(solution.items.end(), items.begin(), items.end());
 		return solution;
