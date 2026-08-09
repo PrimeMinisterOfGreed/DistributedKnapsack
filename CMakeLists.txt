@@ -11,7 +11,7 @@ find_package(spdlog REQUIRED)
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
+add_subdirectory(gpu)
 
 # Collect all source files from src directory
 file(GLOB_RECURSE KP_SRC "src/*.cpp")
