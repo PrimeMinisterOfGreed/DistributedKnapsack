@@ -1,7 +1,8 @@
 #include "knapsackcopa.hpp"
 #include "time.hpp"
-#include "utils.tpp"
+#include "utils.hxx"
 #include <algorithm>
+#include <omp.h>
 #include <ranges>
 
 std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &weights, const std::vector<int> &values,
@@ -12,7 +13,7 @@ std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &w
 	auto Alist = take(list, list.size() / 2);
 	auto Blist = drop(list, list.size() / 2);
 
-	auto A = time_block("generate_copa_subsets(Alist)", [&]() { return generate_copa_subsets(Alist, 1); });
+	auto A = time_block("generate_copa_subsets(Alist)", [&]() { return generate_copa_subsets(Alist); });
 	auto B = time_block("generate_copa_subsets(Blist)", [&]() { return generate_copa_subsets(Blist, 1, true); });
 
 	auto N = static_cast<int>(B.size());
@@ -72,7 +73,7 @@ std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &w
 }
 
 std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, const std::vector<int> &values,
-											 int capacity, int numThreads)
+											 int capacity)
 {
 	using namespace std::views;
 	auto list = zip(weights, values);
@@ -82,6 +83,7 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 		return KnapsackSolution{};
 	if (n % 2 != 0)
 		return std::nullopt;
+	int numThreads = std::clamp(omp_get_max_threads(), 1, n / 2);
 
 	auto Alist = take(list, n / 2);
 	auto Blist = drop(list, n / 2);
@@ -107,8 +109,9 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	std::vector<int> localBestAIdx(k, 0);
 	std::vector<int> localBestBIdx(k, 0);
 
-	time_block("parallel save max",
-			   [&]() { parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k); });
+	time_block("parallel save max", [&]() {
+		parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity);
+	});
 
 // Reduce across all remaining pairs
 #pragma omp parallel for num_threads(numThreads)

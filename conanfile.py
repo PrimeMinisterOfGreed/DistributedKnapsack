@@ -18,6 +18,7 @@ class DistKnapsack(ConanFile):
             return
         self.requires("fmt/12.1.0")
         self.requires("spdlog/1.17.0")
+        self.requires("pybind11/2.13.6")
 
 
         pass

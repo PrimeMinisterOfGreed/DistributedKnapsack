@@ -2,6 +2,7 @@
 #include <boost/mpi.hpp>
 #include <boost/serialization/access.hpp>
 #include <boost/serialization/vector.hpp>
+#include <omp.h>
 #include <spdlog/spdlog.h>
 #include <vector>
 
@@ -47,14 +48,43 @@ enum NODETAG
 	TERMINATE = 4
 };
 
+namespace
+{
+	int computeChunkStart(int chunk_size, int unit)
+	{
+		return unit * chunk_size;
+	}
+
+	int computeChunkEnd(int chunk_size, int unit, int capacity)
+	{
+		return std::min((unit + 1) * chunk_size - 1, capacity);
+	}
+} // namespace
+
 static KnapsackSolution maintask(boost::mpi::communicator &comm, const std::vector<int> &weights,
 								 const std::vector<int> &values, int capacity)
 {
 	using namespace boost::mpi;
 	int n = static_cast<int>(weights.size());
 	int num_workers = comm.size() - 1;
+	int num_units = num_workers + 1;
+
+	// Static partition of the capacity dimension across all compute units
+	// (unit 0 is the coordinator, units 1..num_workers are the workers).
+	int chunk_size = std::max(1, (capacity + 1 + num_units - 1) / num_units);
+	int mainStart = computeChunkStart(chunk_size, 0);
+	int mainEnd = computeChunkEnd(chunk_size, 0, capacity);
 
 	std::vector<std::vector<uint32_t>> dp(n + 1, std::vector<uint32_t>(capacity + 1, 0));
+
+	// Distribute the (fixed) partition once; no per-item TASK/TERMINATE if the
+	// workers compute and return their slice each item.
+	for (int rank = 1; rank <= num_workers; ++rank)
+	{
+		int start = computeChunkStart(chunk_size, rank);
+		int end = computeChunkEnd(chunk_size, rank, capacity);
+		comm.send(rank, NODETAG::TASK, NodeTask{start, end});
+	}
 
 	for (int i = 1; i <= n; ++i)
 	{
@@ -62,20 +92,18 @@ static KnapsackSolution maintask(boost::mpi::communicator &comm, const std::vect
 		broadcast(comm, dp[i - 1].data(), capacity + 1, 0);
 		SPDLOG_DEBUG("[mainnode] item {}: broadcast complete", i);
 
-		int chunk_size = std::max(1, (capacity + num_workers) / num_workers);
-		int in_flight = 0;
-
-		for (int rank = 1; rank <= num_workers; ++rank)
+		// Coordinator computes its own slice with its own threads.
+		#pragma omp parallel for schedule(static)
+		for (int w = mainStart; w <= mainEnd; ++w)
 		{
-			int start = (rank - 1) * chunk_size;
-			int end = std::min(rank * chunk_size - 1, capacity);
-			if (start > end)
-				break;
-			SPDLOG_DEBUG("[mainnode] item {}: sending TASK[{},{}] to rank {}", i, start, end, rank);
-			comm.send(rank, NODETAG::TASK, NodeTask{start, end});
-			++in_flight;
+			if (weights[i - 1] <= w)
+				dp[i][w] = std::max(dp[i - 1][w], dp[i - 1][w - weights[i - 1]] + values[i - 1]);
+			else
+				dp[i][w] = dp[i - 1][w];
 		}
 
+		// Gather the worker slices.
+		int in_flight = num_workers;
 		while (in_flight > 0)
 		{
 			NodeResponse resp{};
@@ -90,12 +118,10 @@ static KnapsackSolution maintask(boost::mpi::communicator &comm, const std::vect
 			for (int w = resp.startIndex; w <= resp.endIndex; ++w)
 				dp[i][w] = data.line[w - resp.startIndex];
 		}
-
-		for (int rank = 1; rank <= num_workers; ++rank)
-			comm.send(rank, NODETAG::TERMINATE, NodeTask{0, 0});
-
-		comm.barrier();
 	}
+
+	for (int rank = 1; rank <= num_workers; ++rank)
+		comm.send(rank, NODETAG::TERMINATE, NodeTask{0, 0});
 
 	SPDLOG_DEBUG("[mainnode] DP complete, optimal value = {}", dp[n][capacity]);
 
@@ -121,38 +147,42 @@ static void workertask(boost::mpi::communicator &comm, const std::vector<int> &w
 	int n = static_cast<int>(weights.size());
 	std::vector<uint32_t> line(capacity + 1, 0);
 
+	// Receive the fixed partition for this worker.
+	NodeTask task{};
+	comm.recv(0, NODETAG::TASK, task);
+	int startIndex = task.startIndex;
+	int endIndex = task.endIndex;
+	int len = endIndex - startIndex + 1;
+
 	for (int i = 1; i <= n; ++i)
 	{
 		SPDLOG_DEBUG("[workernode] item {}: waiting for broadcast", i);
 		broadcast(comm, line.data(), static_cast<int>(line.size()), 0);
 		SPDLOG_DEBUG("[workernode] item {}: received broadcast", i);
 
-		while (true)
+		if (len > 0)
 		{
-			NodeTask task{};
-			auto status = comm.recv(any_source, any_tag, task);
-
-			if (status.tag() == NODETAG::TERMINATE)
-			{
-				SPDLOG_DEBUG("[workernode] item {}: received TERMINATE", i);
-				break;
-			}
-
-			int len = task.endIndex - task.startIndex + 1;
 			std::vector<uint32_t> result(len);
-			for (int w = task.startIndex; w <= task.endIndex; ++w)
+		#pragma omp parallel for schedule(static)
+			for (int w = startIndex; w <= endIndex; ++w)
 			{
 				if (weights[i - 1] <= w)
-					result[w - task.startIndex] = std::max(line[w], line[w - weights[i - 1]] + values[i - 1]);
+					result[w - startIndex] = std::max(line[w], line[w - weights[i - 1]] + values[i - 1]);
 				else
-					result[w - task.startIndex] = line[w];
+					result[w - startIndex] = line[w];
 			}
 
-			comm.send(status.source(), NODETAG::RESPONSE, NodeResponse{task.startIndex, task.endIndex});
-			comm.send(status.source(), NODETAG::DATA, NodeResponseData{std::move(result)});
+			comm.send(0, NODETAG::RESPONSE, NodeResponse{startIndex, endIndex});
+			comm.send(0, NODETAG::DATA, NodeResponseData{std::move(result)});
 		}
-		comm.barrier();
+		else
+		{
+			comm.send(0, NODETAG::RESPONSE, NodeResponse{startIndex, endIndex});
+			comm.send(0, NODETAG::DATA, NodeResponseData{std::vector<uint32_t>()});
+		}
 	}
+
+	comm.recv(0, NODETAG::TERMINATE, task);
 }
 
 std::optional<KnapsackSolution> knapsackdpmpi(boost::mpi::communicator &comm, const std::vector<int> &weights,

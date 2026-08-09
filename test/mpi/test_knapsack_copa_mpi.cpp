@@ -4,7 +4,7 @@
 #include "Knapsack/knapsack.hpp"
 #include "Knapsack/knapsackcopa.hpp"
 #include "Knapsackmpi/knapsackmpi.hpp"
-#include "Knapsackmpi/utils.tpp"
+#include "Knapsackmpi/utils.hxx"
 TEST(CopaSubsetSerialization, BroadcastBetweenNodes)
 {
 	int rank;

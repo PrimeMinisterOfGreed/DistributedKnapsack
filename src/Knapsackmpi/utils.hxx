@@ -1,5 +1,5 @@
 #pragma once
-#include "Knapsack/utils.tpp"
+#include "Knapsack/utils.hxx"
 #include <boost/mpi.hpp>
 #include <boost/mpi/collectives.hpp>
 #include <fmt/core.h>

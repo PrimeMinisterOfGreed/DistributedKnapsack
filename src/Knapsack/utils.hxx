@@ -1,6 +1,6 @@
 #pragma once
 #include "Knapsack/knapsackcopa.hpp"
-#include "concepts.tpp"
+#include "concepts.hxx"
 #include "panic.hpp"
 #include "time.hpp"
 #include <algorithm>
@@ -383,13 +383,12 @@ void prune(const CopaBlockInputRange auto &blocksA, const CopaBlockInputRange au
 void parallel_save_max(const CopaBlockPairingOutRange auto &remainingPairs,
 					   std::ranges::output_range<int> auto &processBestVal,
 					   std::ranges::output_range<int> auto &processBestAIdx,
-					   std::ranges::output_range<int> auto &processBestBIdx, int capacity, int numThreads)
+					   std::ranges::output_range<int> auto &processBestBIdx, int capacity)
 {
-	DBG_ASSERT(numThreads != remainingPairs.size(), "Remaining pairs blocks:{} should be equal to threads:{}",
-			   remainingPairs.size(), numThreads);
+	int m = static_cast<int>(remainingPairs.size());
 
-#pragma omp parallel for num_threads(numThreads)
-	for (int i = 0; i < numThreads; ++i)
+#pragma omp parallel for
+	for (int i = 0; i < m; ++i)
 	{
 		const auto &[blockA, blockB] = remainingPairs[i];
 

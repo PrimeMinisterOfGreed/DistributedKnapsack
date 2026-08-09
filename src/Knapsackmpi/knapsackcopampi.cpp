@@ -1,7 +1,8 @@
 #include "Knapsack/knapsackcopa.hpp"
-#include "Knapsackmpi/utils.tpp"
+#include "Knapsackmpi/utils.hxx"
 #include "knapsackmpi.hpp"
 #include <concepts>
+#include <omp.h>
 #include <ranges>
 
 std::optional<KnapsackSolution> knapsackcopampi(boost::mpi::communicator &comm, const std::vector<int> &weights,
@@ -30,17 +31,39 @@ std::optional<KnapsackSolution> knapsackcopampi(boost::mpi::communicator &comm, 
 	auto A = mpi_generate_copa_subsets(comm, Alist);
 	auto B = mpi_generate_copa_subsets(comm, Blist, true);
 	int N = static_cast<int>(B.size());
-	auto i = comm.rank();
 	// Stage 2 : Parallel suffix max for B (MaxBj and Lj)
-	CopaBlock blockA;
+	int numThreads = std::max(1, omp_get_max_threads());
+	std::vector<CopaBlock> blocksA_local;
 	std::vector<CopaBlock> blocksB(world);
 	std::vector<CopaDistributionIndex> blockBdescriptors(world);
 	auto blockAdesc = mpi_distribute_block_per_process(comm, A);
 	auto blockBdesc = mpi_distribute_block_per_process(comm, B);
 	boost::mpi::all_gather(comm, blockBdesc, blockBdescriptors.data());
 
-	blockA.block = std::span(A).subspan(blockAdesc.start, blockAdesc.end - blockAdesc.start);
-	blockA.maxValue = blockAdesc.maxValue;
+	int sliceLen = blockAdesc.end - blockAdesc.start;
+	numThreads = std::clamp(numThreads, 1, sliceLen);
+	// Subdivide this process's A slice into per-thread contiguous sub-blocks
+	{
+		int subSize = sliceLen / numThreads;
+		int remainder = sliceLen % numThreads;
+		int pos = blockAdesc.start;
+		blocksA_local.reserve(numThreads);
+		for (int t = 0; t < numThreads; ++t)
+		{
+			int len = subSize + (t < remainder ? 1 : 0);
+			CopaBlock cb;
+			cb.block = std::span(A).subspan(pos, len);
+			int maxVal = 0;
+			for (const auto &elem : cb.block)
+			{
+				if (elem.totalValue > maxVal)
+					maxVal = elem.totalValue;
+			}
+			cb.maxValue = maxVal;
+			blocksA_local.push_back(cb);
+			pos += len;
+		}
+	}
 	spdlog::debug("Process {} has block A: start {}, end {}, maxValue {}", comm.rank(), blockAdesc.start,
 				  blockAdesc.end, blockAdesc.maxValue);
 	for (int i = 0; i < world; ++i)
@@ -53,21 +76,24 @@ std::optional<KnapsackSolution> knapsackcopampi(boost::mpi::communicator &comm, 
 
 	// Note: we avoid communication during distribution, each node will only communicate the tasks to perform
 	std::vector<std::pair<CopaBlock, CopaBlock>> local_remaining_pairs{};
-	spdlog::debug("Process {} has distributed blocks A:{} B:{}, starting pruning", comm.rank(), blockA.block.size(),
-				  blocksB.size());
+	spdlog::debug("Process {} has distributed blocks A:{} B:{}, starting pruning", comm.rank(),
+				  blocksA_local.size(), blocksB.size());
 
 	comm.barrier();
 
-	prune_block_pair(blockA, blocksB, local_remaining_pairs, capacity, i);
-	spdlog::debug("Process {} has pruned block pairs, remaining pairs: {}", i, local_remaining_pairs.size());
+	prune(blocksA_local, blocksB, local_remaining_pairs, capacity, numThreads);
+	spdlog::debug("Process {} has pruned block pairs, remaining pairs: {}", comm.rank(), local_remaining_pairs.size());
 
+	// Stage 3+4 : Parallel saved-max across all remaining block pairs
+	int m = static_cast<int>(local_remaining_pairs.size());
+	std::vector<int> localBestVal(m, 0), localBestAIdx(m, 0), localBestBIdx(m, 0);
+	parallel_save_max(local_remaining_pairs, localBestVal, localBestAIdx, localBestBIdx, capacity);
 	BlockPairSearchResult solution{};
-	for (const auto &[remBlockA, remBlockB] : local_remaining_pairs)
+	for (int i = 0; i < m; ++i)
 	{
-		auto local_solution = block_pair_pointer_search(remBlockA, remBlockB, capacity);
-		if (local_solution.bestVal > solution.bestVal)
+		if (localBestVal[i] > solution.bestVal)
 		{
-			solution = local_solution;
+			solution = BlockPairSearchResult{localBestVal[i], localBestAIdx[i], localBestBIdx[i]};
 		}
 	}
 	BlockPairSearchResult best{};

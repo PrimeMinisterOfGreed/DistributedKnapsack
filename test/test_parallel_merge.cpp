@@ -1,4 +1,4 @@
-#include "Knapsack/utils.tpp"
+#include "Knapsack/utils.hxx"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <vector>
@@ -87,10 +87,6 @@ TEST(DivideInBalancedBlocks, UnevenDivisionHandlesRemainder)
 // ============================================================================
 // Performance and correctness tests for generate_copa_subsets
 // ============================================================================
-
-#include <chrono>
-#include <fmt/chrono.h>
-#include <fmt/format.h>
 
 /**
  * @brief Verify that a vector of CopaSubset is sorted by totalWeight ascending.
@@ -208,9 +204,8 @@ TEST(GenerateCopaSubsets_Correctness, ReverseOrderFlagWorks)
 }
 
 // ============================================================================
-// Timed benchmarks for generate_copa_subsets
+// Cross-validation: total weight sum across all subsets
 // ============================================================================
-
 class GenerateCopaSubsetsTimed : public testing::Test
 {
   protected:
@@ -226,103 +221,8 @@ class GenerateCopaSubsetsTimed : public testing::Test
 		}
 		return items;
 	}
-
-	/**
-	 * @brief Run generate_copa_subsets and report elapsed time.
-	 * Returns the subsets and the elapsed microseconds.
-	 */
-	std::pair<std::vector<CopaSubset>, int64_t> timed_run(const std::vector<std::pair<int, int>> &items, int threads)
-	{
-		auto start = std::chrono::steady_clock::now();
-		auto subsets = generate_copa_subsets(items, threads);
-		auto end = std::chrono::steady_clock::now();
-		auto us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-		return {std::move(subsets), us};
-	}
 };
 
-TEST_F(GenerateCopaSubsetsTimed, BenchmarkN5)
-{
-	auto items = make_items(5);
-	fmt::println("\n--- Benchmark n=5 (expected 2^5 = {} subsets) ---", 1 << 5);
-
-	for (int t : {1, 2, 4})
-	{
-		auto [subsets, us] = timed_run(items, t);
-		EXPECT_TRUE(is_sorted_by_weight(subsets));
-		fmt::println("  threads={}: {:>6} µs ({} subsets)", t, us, subsets.size());
-	}
-}
-
-TEST_F(GenerateCopaSubsetsTimed, BenchmarkN10)
-{
-	auto items = make_items(10);
-	fmt::println("\n--- Benchmark n=10 (expected 2^10 = {} subsets) ---", 1 << 10);
-
-	for (int t : {1, 2, 4, 8})
-	{
-		auto [subsets, us] = timed_run(items, t);
-		EXPECT_TRUE(is_sorted_by_weight(subsets));
-		fmt::println("  threads={}: {:>6} µs ({} subsets)", t, us, subsets.size());
-	}
-}
-
-TEST_F(GenerateCopaSubsetsTimed, BenchmarkN15)
-{
-	auto items = make_items(15);
-	fmt::println("\n--- Benchmark n=15 (expected 2^15 = {} subsets) ---", 1 << 15);
-
-	for (int t : {1, 2, 4, 8})
-	{
-		auto [subsets, us] = timed_run(items, t);
-		EXPECT_TRUE(is_sorted_by_weight(subsets));
-		fmt::println("  threads={}: {:>6} µs ({} subsets)", t, us, subsets.size());
-	}
-}
-
-TEST_F(GenerateCopaSubsetsTimed, BenchmarkN20)
-{
-	auto items = make_items(20);
-	fmt::println("\n--- Benchmark n=20 (expected 2^20 = {} subsets) ---", 1 << 20);
-
-	for (int t : {4, 8, 16, 32})
-	{
-		auto [subsets, us] = timed_run(items, t);
-		EXPECT_TRUE(is_sorted_by_weight(subsets));
-		fmt::println("  threads={}: {:>9} µs ({} subsets)", t, us, subsets.size());
-	}
-}
-
-
-TEST_F(GenerateCopaSubsetsTimed, BenchmarkN25)
-{
-	auto items = make_items(25);
-
-	auto [subsets, us] = timed_run(items, 32);
-	EXPECT_TRUE(is_sorted_by_weight(subsets));
-	fmt::println("  threads={}: {:>9} µs ({} subsets)", 32, us, subsets.size());
-}
-
-TEST_F(GenerateCopaSubsetsTimed, CompareAllThreadCountsN12)
-{
-	auto items = make_items(12);
-	fmt::println("\n--- Comparative benchmark n=12 (2^12 = {} subsets) ---", 1 << 12);
-
-	int64_t ref_us = 0;
-	for (int t : {1, 2, 4, 8, 12})
-	{
-		auto [subsets, us] = timed_run(items, t);
-		EXPECT_TRUE(is_sorted_by_weight(subsets));
-		if (t == 1)
-			ref_us = us;
-		double speedup = (us > 0) ? static_cast<double>(ref_us) / us : 0.0;
-		fmt::println("  threads={}: {:>6} µs  (speedup: {:.2f}x)", t, us, speedup);
-	}
-}
-
-// ============================================================================
-// Cross-validation: total weight sum across all subsets
-// ============================================================================
 TEST_F(GenerateCopaSubsetsTimed, TotalWeightSumMatchesReference)
 {
 	// For n items with weights w_i, each weight appears in exactly 2^(n-1) subsets

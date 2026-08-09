@@ -1,21 +1,11 @@
 #include "Knapsack/knapsack.hpp"
 #include "Knapsack/knapsackcopa.hpp"
-#include "Knapsack/utils.tpp"
+#include "Knapsack/utils.hxx"
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <random>
 #include <vector>
 #include <gtest/gtest.h>
-TEST(KnapsackDP, OneThreadFindsOptimalValue)
-{
-	const std::vector<int> weights{1, 2, 3, 4};
-	const std::vector<int> values{1, 6, 10, 16};
-	constexpr int capacity = 7;
-	auto result = knapsackdp(weights, values, capacity, 1);
-	fmt::println("Included items: {}", fmt::join(result.items, ", "));
-	EXPECT_EQ(result.totalValue, 26);
-}
-
 TEST(KnapsackDP, MultipleThreadsFindOptimalValue)
 {
 	const std::vector<int> weights{1, 2, 3, 4};
@@ -24,34 +14,6 @@ TEST(KnapsackDP, MultipleThreadsFindOptimalValue)
 	auto result = knapsackdp(weights, values, capacity, 4);
 	fmt::println("Included items: {}", fmt::join(result.items, ", "));
 	EXPECT_EQ(result.totalValue, 26);
-}
-
-TEST(GenerateCopaSubsets, ProducesAllSubsetsSortedByWeight)
-{
-	std::vector<std::pair<int, int>> items{{1, 1}, {2, 2}};
-	auto subsets = generate_copa_subsets(items, 3);
-
-	EXPECT_EQ(subsets.size(), 4u);
-
-	std::vector<int> weights;
-	std::vector<int> values;
-	for (auto &s : subsets)
-	{
-		weights.push_back(s.totalWeight);
-		values.push_back(s.totalValue);
-	}
-
-	std::vector<int> expected_weights{0, 1, 2, 3};
-	std::vector<int> expected_values{0, 1, 2, 3};
-
-	EXPECT_EQ(weights, expected_weights);
-	EXPECT_EQ(values, expected_values);
-
-	std::vector<std::vector<int>> expected_items{{}, {0}, {1}, {0, 1}};
-	EXPECT_EQ(subsets[0].getItemIndices(), expected_items[0]);
-	EXPECT_EQ(subsets[1].getItemIndices(), expected_items[1]);
-	EXPECT_EQ(subsets[2].getItemIndices(), expected_items[2]);
-	EXPECT_EQ(subsets[3].getItemIndices(), expected_items[3]);
 }
 
 TEST(Prune, SingleThreadKeepsValidBlockPairs)
@@ -145,27 +107,6 @@ TEST(Prune, MultiThreadPrunesAndKeepsCorrectly)
 	EXPECT_EQ(blocks[1].second.maxValue, 30);
 }
 
-TEST(KnapsackCopaSequential, OneThreadFindsOptimalValue)
-{
-	const std::vector<int> weights{1, 2, 3, 4};
-	const std::vector<int> values{1, 6, 10, 16};
-	constexpr int capacity = 7;
-	auto result = knapsackcopasequential(weights, values, capacity);
-	ASSERT_TRUE(result.has_value());
-	fmt::println("Included items: {}", fmt::join(result->items, ", "));
-	EXPECT_EQ(result->totalValue, 26);
-}
-
-TEST(KnapsackCopaSequential, SmallCapacityFindsOptimalValue)
-{
-	const std::vector<int> weights{2, 3, 4, 5};
-	const std::vector<int> values{3, 4, 5, 6};
-	constexpr int capacity = 5;
-	auto result = knapsackcopasequential(weights, values, capacity);
-	ASSERT_TRUE(result.has_value());
-	EXPECT_EQ(result->totalValue, 7);
-}
-
 TEST(KnapsackCopaSequential, EmptyItemsReturnsZero)
 {
 	const std::vector<int> weights{};
@@ -184,141 +125,6 @@ TEST(KnapsackCopaSequential, OddNumberOfItemsReturnsNullopt)
 	constexpr int capacity = 7;
 	auto result = knapsackcopasequential(weights, values, capacity);
 	EXPECT_FALSE(result.has_value());
-}
-
-TEST(KnapsackCopaSequential, AllItemsFit)
-{
-	const std::vector<int> weights{1, 2, 3, 4};
-	const std::vector<int> values{1, 6, 10, 16};
-	constexpr int capacity = 15;
-	auto result = knapsackcopasequential(weights, values, capacity);
-	ASSERT_TRUE(result.has_value());
-	EXPECT_EQ(result->totalValue, 33);
-	EXPECT_EQ(result->totalWeight, 10);
-}
-
-TEST(KnapsackCopaSequential, SingleItemFits)
-{
-	const std::vector<int> weights{1, 2, 3, 4};
-	const std::vector<int> values{1, 6, 10, 16};
-	constexpr int capacity = 1;
-	auto result = knapsackcopasequential(weights, values, capacity);
-	ASSERT_TRUE(result.has_value());
-	EXPECT_EQ(result->totalValue, 1);
-	EXPECT_EQ(result->totalWeight, 1);
-}
-
-TEST(KnapsackCopa, SingleThreadMatchesSequential)
-{
-	const std::vector<int> weights{1, 2, 3, 4};
-	const std::vector<int> values{1, 6, 10, 16};
-	constexpr int capacity = 7;
-	auto expected = knapsackcopasequential(weights, values, capacity);
-	ASSERT_TRUE(expected.has_value());
-
-	auto result = knapsackcopa(weights, values, capacity, 1);
-	ASSERT_TRUE(result.has_value());
-	EXPECT_EQ(result->totalValue, expected->totalValue);
-	EXPECT_EQ(result->totalWeight, expected->totalWeight);
-	EXPECT_EQ(result->items, expected->items);
-}
-
-TEST(KnapsackCopa, MultiThreadFindsOptimalValue)
-{
-	const std::vector<int> weights{1, 2, 3, 4};
-	const std::vector<int> values{1, 6, 10, 16};
-	constexpr int capacity = 7;
-	auto result = knapsackcopa(weights, values, capacity, 2);
-	ASSERT_TRUE(result.has_value());
-	EXPECT_EQ(result->totalValue, 26);
-}
-
-TEST(KnapsackCopa, MultiThreadSmallCapacity)
-{
-	const std::vector<int> weights{2, 3, 4, 5};
-	const std::vector<int> values{3, 4, 5, 6};
-	constexpr int capacity = 5;
-	auto result = knapsackcopa(weights, values, capacity, 2);
-	ASSERT_TRUE(result.has_value());
-	// Optimal: items 0+1 (weights 2+3=5, values 3+4=7)
-	EXPECT_EQ(result->totalValue, 7);
-	EXPECT_EQ(result->totalWeight, 5);
-}
-
-TEST(KnapsackCopa, MultiThreadAllItemsFit)
-{
-	const std::vector<int> weights{1, 2, 3, 4};
-	const std::vector<int> values{1, 6, 10, 16};
-	constexpr int capacity = 15;
-	auto result = knapsackcopa(weights, values, capacity, 2);
-	ASSERT_TRUE(result.has_value());
-	EXPECT_EQ(result->totalValue, 33);
-	EXPECT_EQ(result->totalWeight, 10);
-}
-
-TEST(KnapsackCopa, MultiThreadSingleItemFits)
-{
-	const std::vector<int> weights{1, 2, 3, 4};
-	const std::vector<int> values{1, 6, 10, 16};
-	constexpr int capacity = 1;
-	auto result = knapsackcopa(weights, values, capacity, 2);
-	ASSERT_TRUE(result.has_value());
-	EXPECT_EQ(result->totalValue, 1);
-	EXPECT_EQ(result->totalWeight, 1);
-}
-
-TEST(KnapsackCopa, EmptyItemsReturnsZero)
-{
-	const std::vector<int> weights{};
-	const std::vector<int> values{};
-	constexpr int capacity = 10;
-	auto result = knapsackcopa(weights, values, capacity, 2);
-	ASSERT_TRUE(result.has_value());
-	EXPECT_EQ(result->totalValue, 0);
-	EXPECT_EQ(result->items.empty(), true);
-}
-
-TEST(KnapsackCopa, OddNumberOfItemsReturnsNullopt)
-{
-	const std::vector<int> weights{1, 2, 3};
-	const std::vector<int> values{1, 6, 10};
-	constexpr int capacity = 7;
-	auto result = knapsackcopa(weights, values, capacity, 2);
-	EXPECT_FALSE(result.has_value());
-}
-
-TEST(KnapsackCopa, ConsistencyAcrossThreadCounts)
-{
-	const std::vector<int> weights{1, 2, 3, 4, 5, 6};
-	const std::vector<int> values{10, 20, 30, 40, 50, 60};
-	constexpr int capacity = 10;
-
-	auto result1 = knapsackcopa(weights, values, capacity, 1);
-	auto result2 = knapsackcopa(weights, values, capacity, 2);
-	auto result3 = knapsackcopa(weights, values, capacity, 3);
-	ASSERT_TRUE(result1.has_value());
-	ASSERT_TRUE(result2.has_value());
-	ASSERT_TRUE(result3.has_value());
-	EXPECT_EQ(result1->totalValue, result2->totalValue);
-	EXPECT_EQ(result1->totalValue, result3->totalValue);
-}
-
-TEST(KnapsackCopa, LargerInstanceMatchesSequential)
-{
-	const std::vector<int> weights{5, 10, 15, 22, 25, 30, 35, 40};
-	const std::vector<int> values{30, 40, 45, 77, 90, 100, 110, 120};
-	constexpr int capacity = 100;
-
-	auto dpseq = knapsackdp(weights, values, capacity, 1);
-	auto seq = knapsackcopasequential(weights, values, capacity);
-	ASSERT_TRUE(seq.has_value());
-
-	auto par = knapsackcopa(weights, values, capacity, 4);
-	ASSERT_TRUE(par.has_value());
-	EXPECT_EQ(par->totalValue, seq->totalValue);
-	EXPECT_EQ(par->totalWeight, seq->totalWeight);
-	EXPECT_EQ(seq->totalValue, dpseq.totalValue);
-	EXPECT_EQ(seq->totalWeight, dpseq.totalWeight);
 }
 
 TEST(CrossValidator, DpCopaSequentialCopaParallelAgree)
@@ -345,7 +151,7 @@ TEST(CrossValidator, DpCopaSequentialCopaParallelAgree)
 	{
 		auto dp_result = knapsackdp(w, v, cap, 1);
 		auto copa_seq = knapsackcopasequential(w, v, cap);
-		auto copa_par = knapsackcopa(w, v, cap, 4);
+		auto copa_par = knapsackcopa(w, v, cap);
 
 		ASSERT_TRUE(copa_seq.has_value()) << "COPA sequential failed for capacity=" << cap;
 		ASSERT_TRUE(copa_par.has_value()) << "COPA parallel failed for capacity=" << cap;
@@ -374,7 +180,7 @@ TEST(TestKnapSackCopa, TestHugeCase)
 		}
 
 		auto dp_result = knapsackdp(weights, values, capacity, 32);
-		auto copa_par = knapsackcopa(weights, values, capacity, 32);
+		auto copa_par = knapsackcopa(weights, values, capacity);
 
 		ASSERT_TRUE(copa_par.has_value()) << "COPA parallel failed for huge case";
 

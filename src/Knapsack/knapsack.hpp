@@ -14,5 +14,4 @@ std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &w
 													   int capacity);
 
 std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, const std::vector<int> &values,
-											 int capacity, int numThreads = 1);
-
+											 int capacity);
