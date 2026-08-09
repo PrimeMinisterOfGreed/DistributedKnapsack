@@ -62,7 +62,7 @@ class BenchmarkKnapsackCOPAMPI(BenchmarkTest):
 
     def onExecute(self) -> KnapsackSolution:
         check_mpi_initialized()
-        return knapsackcopampi(self.args, self.numThreads)
+        return knapsackcopampi(self.args)
 
 
 class BenchmarkKnapsackDPMPI(BenchmarkTest):
