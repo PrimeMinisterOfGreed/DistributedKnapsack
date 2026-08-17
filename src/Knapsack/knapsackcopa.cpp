@@ -88,18 +88,18 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	auto Alist = take(list, n / 2);
 	auto Blist = drop(list, n / 2);
 	std::vector<CopaSubset> A, B;
-	A = time_block("generate_copa_subsets(Alist)", [&]() { return generate_copa_subsets(Alist, numThreads); });
+	A = TIME_BLOCK("generate_copa_subsets(Alist)", return generate_copa_subsets(Alist, numThreads););
 
-	B = time_block("generate_copa_subsets(Blist)", [&]() { return generate_copa_subsets(Blist, numThreads, true); });
+	B = TIME_BLOCK("generate_copa_subsets(Blist)", return generate_copa_subsets(Blist, numThreads, true););
 	int N = static_cast<int>(B.size());
 	// Stage 2 : Parallel suffix max for B (MaxBj and Lj)
 	std::vector<CopaBlock> blocksA(numThreads);
 	std::vector<CopaBlock> blocksB(numThreads);
-	distribute_block_per_processor(A, blocksA, numThreads);
-	distribute_block_per_processor(B, blocksB, numThreads);
+	TIME_BLOCK("distribute blocks A", distribute_block_per_processor(A, blocksA, numThreads););
+	TIME_BLOCK("distribute blocks B", distribute_block_per_processor(B, blocksB, numThreads););
 	// Stage 3: Parallel pruning
 	std::vector<std::pair<CopaBlock, CopaBlock>> remainingPairs;
-	time_block("prune blocks", [&]() { prune(blocksA, blocksB, remainingPairs, capacity, numThreads); });
+	TIME_BLOCK("prune blocks", prune(blocksA, blocksB, remainingPairs, capacity, numThreads););
 
 	// Stages 4+5: For each remaining block pair, compute suffix max and search
 	int k = static_cast<int>(remainingPairs.size());
@@ -109,9 +109,8 @@ std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, co
 	std::vector<int> localBestAIdx(k, 0);
 	std::vector<int> localBestBIdx(k, 0);
 
-	time_block("parallel save max", [&]() {
-		parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity);
-	});
+	TIME_BLOCK("parallel save max",
+			   parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity););
 
 // Reduce across all remaining pairs
 #pragma omp parallel for num_threads(numThreads)
