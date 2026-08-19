@@ -2,13 +2,13 @@
 #include "knapsack.hpp"
 #include <boost/serialization/access.hpp>
 #include <boost/serialization/vector.hpp>
-
+#include <span>
 struct CopaSubset
 {
 	int totalWeight{};
 	int totalValue{};
 	int index{};
-	
+
 	friend class boost::serialization::access;
 	template <class Archive> void serialize(Archive &ar, const unsigned int /*version*/)
 	{
@@ -45,7 +45,7 @@ struct CopaSubset
 
 	CopaSubset operator<<(const CopaSubset &other) const
 	{
-		
+
 		return {};
 	}
 };

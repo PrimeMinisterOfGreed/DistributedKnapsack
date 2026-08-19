@@ -1,5 +1,6 @@
 #pragma once
-#include <boost/mpi.hpp>
+#include <boost/graph/adjacency_list.hpp>
+#include <optional>
 #include <vector>
 struct KnapsackSolution
 {
@@ -15,3 +16,6 @@ std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &w
 
 std::optional<KnapsackSolution> knapsackcopa(const std::vector<int> &weights, const std::vector<int> &values,
 											 int capacity);
+
+KnapsackSolution knapsackdpdag(const std::vector<int> &weights, const std::vector<int> &values, int capacity,
+							   int numThreads = 1, int item_block = 10, int cap_block = 0);
