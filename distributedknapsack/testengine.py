@@ -42,12 +42,12 @@ def check_mpi_initialized() -> None:
 
 class BenchmarkKnapsackDP(BenchmarkTest):
     def onExecute(self) -> KnapsackSolution:
-        return knapsackdp(self.args, self.numThreads)
+        return knapsackdp(self.args)
 
 
 class BenchmarkKnapsackCOPA(BenchmarkTest):
     def onExecute(self) -> KnapsackSolution:
-        return knapsackcopa(self.args, self.numThreads)
+        return knapsackcopa(self.args)
 
 
 class BenchmarkKnapsackCOPASerial(BenchmarkTest):

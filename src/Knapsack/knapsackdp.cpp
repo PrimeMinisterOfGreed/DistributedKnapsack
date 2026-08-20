@@ -1,7 +1,6 @@
 #include "knapsack.hpp"
 
-KnapsackSolution knapsackdp(const std::vector<int> &weights, const std::vector<int> &values, int capacity,
-							int numThreads)
+KnapsackSolution knapsackdp(const std::vector<int> &weights, const std::vector<int> &values, int capacity)
 {
 	int n = weights.size();
 	std::vector<std::vector<int>> dp(n + 1, std::vector<int>(capacity + 1, 0));
@@ -9,7 +8,7 @@ KnapsackSolution knapsackdp(const std::vector<int> &weights, const std::vector<i
 	// Build the dp table
 	for (int i = 1; i <= n; ++i)
 	{
-#pragma omp parallel for num_threads(numThreads)
+#pragma omp parallel for
 		for (int w = 0; w <= capacity; ++w)
 		{
 			if (weights[i - 1] <= w)

@@ -156,7 +156,7 @@ TEST(KnapsackDPMPI, MatchesSequentialDP)
 		ASSERT_TRUE(mpi_result.has_value());
 		
 		// Compare with sequential DP
-		auto seq_result = knapsackdp(weights, values, capacity, 1);
+		auto seq_result = knapsackdp(weights, values, capacity);
 		
 		EXPECT_EQ(mpi_result->totalValue, seq_result.totalValue);
 		EXPECT_EQ(mpi_result->totalWeight, seq_result.totalWeight);
@@ -382,7 +382,7 @@ TEST(KnapsackDPMPI, Benchmark100ElementsWithValidation)
 		EXPECT_LE(computedWeight, capacity) << "Over capacity!";
 		
 		// Compare with sequential solution
-		auto seq_result = knapsackdp(weights, values, capacity, 1);
+		auto seq_result = knapsackdp(weights, values, capacity);
 		
 		EXPECT_EQ(mpi_result->totalValue, seq_result.totalValue) 
 			<< "MPI value " << mpi_result->totalValue 

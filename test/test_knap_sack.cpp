@@ -11,7 +11,7 @@ TEST(KnapsackDP, MultipleThreadsFindOptimalValue)
 	const std::vector<int> weights{1, 2, 3, 4};
 	const std::vector<int> values{1, 6, 10, 16};
 	constexpr int capacity = 7;
-	auto result = knapsackdp(weights, values, capacity, 4);
+	auto result = knapsackdp(weights, values, capacity);
 	fmt::println("Included items: {}", fmt::join(result.items, ", "));
 	EXPECT_EQ(result.totalValue, 26);
 }
@@ -149,7 +149,7 @@ TEST(CrossValidator, DpCopaSequentialCopaParallelAgree)
 
 	for (const auto &[w, v, cap] : cases)
 	{
-		auto dp_result = knapsackdp(w, v, cap, 1);
+		auto dp_result = knapsackdp(w, v, cap);
 		auto copa_seq = knapsackcopasequential(w, v, cap);
 		auto copa_par = knapsackcopa(w, v, cap);
 
@@ -179,7 +179,7 @@ TEST(TestKnapSackCopa, TestHugeCase)
 			values[i] = rng() % 100 + 1;  // Values between 1 and 100
 		}
 
-		auto dp_result = knapsackdp(weights, values, capacity, 32);
+		auto dp_result = knapsackdp(weights, values, capacity);
 		auto copa_par = knapsackcopa(weights, values, capacity);
 
 		ASSERT_TRUE(copa_par.has_value()) << "COPA parallel failed for huge case";

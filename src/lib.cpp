@@ -32,9 +32,9 @@ struct KnapsackArguments
 	}
 };
 
-KnapsackSolution knapsackdpsolver(KnapsackArguments args, int numThreads)
+KnapsackSolution knapsackdpsolver(KnapsackArguments args)
 {
-	return knapsackdp(args.weights, args.values, args.capacity, numThreads);
+	return knapsackdp(args.weights, args.values, args.capacity);
 }
 
 KnapsackSolution knapsackdpmpisolver(KnapsackArguments args)
@@ -101,7 +101,7 @@ PYBIND11_MODULE(libdistributed_knapsack, m)
 		.def_readwrite("weights", &KnapsackArguments::weights)
 		.def_readwrite("values", &KnapsackArguments::values)
 		.def_readwrite("capacity", &KnapsackArguments::capacity);
-	m.def("knapsackdp", &knapsackdpsolver, py::arg("args"), py::arg("numThreads") = 1);
+	m.def("knapsackdp", &knapsackdpsolver, py::arg("args"));
 	m.def("knapsackcopa", &knapsackcopasolver, py::arg("args"));
 	m.def("knapsackcopasequential", &knapsackcopasequentialsolver, py::arg("args"));
 	m.def("knapsackcopampi", &knapsackcopampisolver, py::arg("args"));

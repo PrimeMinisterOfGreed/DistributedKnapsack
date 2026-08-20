@@ -1,6 +1,10 @@
 #pragma once
+#include <Eigen/Dense>
 #include <boost/graph/adjacency_list.hpp>
 #include <vector>
+
+/** @brief Row-major integer matrix used for a tile's DP block. */
+using BlockMatrix = Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
 
 /**
  * @brief Per-vertex (per-tile) data attached to the dependency DAG.
@@ -9,16 +13,17 @@
  *   - items  [b*item_block, min((b+1)*item_block, n))   -> `rows` rows
  *   - capacities [q*cap_block, q*cap_block + `width`)   -> `width` columns
  *
- * The DP block is stored flattened row-major with `rows` rows and `width`
- * columns, where row 0 is the boundary value inherited from the tile above.
+ * The DP block is an Eigen matrix with `rows` rows and `width` columns
+ * (row-major, so block(r, c) is the cell for item r and capacity offset c),
+ * where row 0 is the boundary value inherited from the tile above.
  */
 struct NodeData
 {
-	int b, q;			  // tile grid coordinates
-	int rows;			  // rows_local + 1 (number of rows in this tile's block)
-	int width;			  // wq (number of columns in this tile's block)
-	int level;			  // longest-path wavefront level (for future parallelization)
-	std::vector<int> block; // flattened DP block, size rows * width
+	int b, q;		 // tile grid coordinates
+	int rows;		 // rows_local + 1 (number of rows in this tile's block)
+	int width;		 // wq (number of columns in this tile's block)
+	int level;		 // longest-path wavefront level (for future parallelization)
+	BlockMatrix block; // DP block, dimensions rows x width
 };
 
 namespace _detail
@@ -70,8 +75,8 @@ void compute_levels(Graph &g);
  * @param cap_block  capacities per tile column
  * @return the optimal total value
  */
-int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> &values, int capacity,
-			  int item_block, int cap_block);
+int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> &values, int capacity, int item_block,
+			  int cap_block);
 
 /**
  * @brief Recover the indices of the items included in the optimal solution.

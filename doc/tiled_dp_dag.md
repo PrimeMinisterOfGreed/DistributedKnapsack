@@ -94,11 +94,15 @@ b:
    └──────────┘ └──────────┘ └──────────┘
 ```
 
-Ogni tile `(b,q)` contiene un **buffer DP appiattito** di
-`rows × width` celle (in `NodeData.block`), dove:
+Ogni tile `(b,q)` contiene una **matrice DP Eigen** di `rows × width`
+celle (in `NodeData.block`, di tipo `BlockMatrix` = `Matrix<int,Dynamic,Dynamic,RowMajor>`),
+dove:
 
 - `rows = rows_local + 1` (item del blocco + una riga "boundary")
 - `width = min(cap_block, C+1 - q·cap_block)`
+
+Il layout è **row-major**: `block(r, c)` è la cella per l'item `r` e
+l'offset di capacità `c`, coerente con la ricorrenza DP.
 
 La riga `0` del tile è la **boundary**: eredita l'ultima riga del tile sopra
 (oppure è tutta zero per `b == 0`). Le righe `1..rows_local` sono calcolate
@@ -207,17 +211,17 @@ Per ogni tile `(b,q)` in ordine topologico:
    - altrimenti: per ogni colonna locale `c`, mappa la capacità assoluta
      `wp = q·cap_block + c` nel tile sopra
      (`q_prev = wp / cap_block`, `c_prev = wp - q_prev·cap_block`) e copia
-     `block[riga rows-1][c_prev]` del tile sopra.
+     `block(rows-1, c_prev)` del tile sopra.
 
 2. **Righe interne (item del blocco)**: per ogni riga `a` e colonna `c`:
-   - `v = block[a][c]` (salta l'item);
+   - `v = block(a, c)` (salta l'item);
    - se `wi <= wp`, calcola `src = wp - wi`:
-     - se `src >= lo`: `cand = block[a][src-lo] + vi` (stesso tile);
-     - altrimenti: `cand = block[a][c_prev] + vi` del tile sinistro `(b, q_prev)`;
+     - se `src >= lo`: `cand = block(a, src-lo) + vi` (stesso tile);
+     - altrimenti: `cand = block(a, c_prev) + vi` del tile sinistro `(b, q_prev)`;
    - `v = max(v, cand)`;
-   - scrivi `block[a+1][c] = v`.
+   - scrivi `block(a+1, c) = v`.
 
-Alla fine, il valore ottimo è in `block[riga rows-1][colonna C-(nq-1)·cap_block]`
+Alla fine, il valore ottimo è in `block(rows-1, C-(nq-1)·cap_block)`
 del tile in basso a destra `(nb-1, nq-1)`.
 
 ### Backtracking

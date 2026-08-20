@@ -6,11 +6,12 @@ Graph build_graph(const std::vector<int> &weights, int capacity, int item_block,
 {
 	const int n = static_cast<int>(weights.size());
 	const int nb = (n + item_block - 1) / item_block;
-	const int nq = (capacity + 1 + cap_block - 1) / cap_block;
+	const int nq = (capacity + cap_block) / cap_block;
 
 	Graph g;
 
 	// Add all vertices first (row-major), so the vertex descriptor is b*nq+q.
+
 	for (int b = 0; b < nb; ++b)
 	{
 		const int i_start = b * item_block;
@@ -19,10 +20,9 @@ Graph build_graph(const std::vector<int> &weights, int capacity, int item_block,
 		for (int q = 0; q < nq; ++q)
 		{
 			const int width = std::min(cap_block, capacity + 1 - q * cap_block);
-			NodeData nd{b, q, rows_local + 1, width, 0, {}};
-			nd.block.assign(static_cast<std::size_t>(rows_local + 1) * width, 0);
+			NodeData nd{b, q, rows_local + 1, width, 0, BlockMatrix::Zero(rows_local + 1, width)};
 			const auto v = boost::add_vertex(g);
-			g[v] = nd;
+			g[v] = std::move(nd);
 		}
 	}
 
@@ -113,7 +113,7 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 			{
 				if (b == 0)
 				{
-					nd.block[c] = 0;
+					nd.block(0, c) = 0;
 				}
 				else
 				{
@@ -121,7 +121,7 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 					const int q_prev = wp / cap_block;
 					const int c_prev = wp - q_prev * cap_block;
 					const NodeData &src = g[static_cast<std::size_t>(b - 1) * nq + q_prev];
-					nd.block[c] = src.block[static_cast<std::size_t>(src.rows - 1) * src.width + c_prev];
+					nd.block(0, c) = src.block(src.rows - 1, c_prev);
 				}
 			}
 
@@ -136,14 +136,14 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 				{
 					const int wp = lo + c;
 					// "Skip item": carry previous best value.
-					int v = nd.block[static_cast<std::size_t>(a) * width + c];
+					int v = nd.block(a, c);
 					if (wi <= wp)
 					{
 						const int src = wp - wi;
 						if (src >= lo)
 						{
 							// Source capacity is inside this same tile.
-							v = std::max(v, nd.block[static_cast<std::size_t>(a) * width + (src - lo)] + pi);
+							v = std::max(v, nd.block(a, src - lo) + pi);
 						}
 						else
 						{
@@ -151,10 +151,10 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 							const int q_prev = src / cap_block;
 							const int c_prev = src - q_prev * cap_block;
 							const NodeData &left = g[static_cast<std::size_t>(b) * nq + q_prev];
-							v = std::max(v, left.block[static_cast<std::size_t>(a) * left.width + c_prev] + pi);
+							v = std::max(v, left.block(a, c_prev) + pi);
 						}
 					}
-					nd.block[static_cast<std::size_t>(a + 1) * width + c] = v;
+					nd.block(a + 1, c) = v;
 				}
 			}
 		}
@@ -162,7 +162,7 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 
 	const NodeData &last = g[static_cast<std::size_t>(nb - 1) * nq + (nq - 1)];
 	const int c_last = capacity - (nq - 1) * cap_block;
-	return last.block[static_cast<std::size_t>(last.rows - 1) * last.width + c_last];
+	return last.block(last.rows - 1, c_last);
 }
 
 std::vector<int> reconstruct_items(const Graph &g, const std::vector<int> &weights, const std::vector<int> &values,
@@ -181,7 +181,7 @@ std::vector<int> reconstruct_items(const Graph &g, const std::vector<int> &weigh
 		const NodeData &nd = g[static_cast<std::size_t>(b) * nq + q];
 		const int r = i - b * item_block;
 		const int c = w - q * cap_block;
-		return nd.block[static_cast<std::size_t>(r) * nd.width + c];
+		return nd.block(r, c);
 	};
 
 	std::vector<int> items;
@@ -200,9 +200,8 @@ std::vector<int> reconstruct_items(const Graph &g, const std::vector<int> &weigh
 }
 
 KnapsackSolution knapsackdpdag(const std::vector<int> &weights, const std::vector<int> &values, int capacity,
-							   int numThreads, int item_block, int cap_block)
+							   int item_block, int cap_block)
 {
-	(void)numThreads; // sequential for now; parallelizable later via compute_levels
 	if (cap_block == 0)
 		cap_block = std::max(1, (capacity + 1) / 10);
 

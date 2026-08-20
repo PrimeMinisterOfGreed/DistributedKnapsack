@@ -10,7 +10,7 @@ TEST(KnapsackDPDAG, TiledSolverMatchesClassicDP)
 	const std::vector<int> values{1, 6, 10, 16};
 	constexpr int capacity = 7;
 
-	const auto classic = knapsackdp(weights, values, capacity, 1);
+	const auto classic = knapsackdp(weights, values, capacity);
 
 	for (int item_block : {1, 2, 4, 10})
 	{
@@ -37,8 +37,8 @@ TEST(KnapsackDPDAG, PublicInterfaceMatchesClassicOnRandomInstances)
 			values[i] = 1 + static_cast<int>(rng() % 10);
 		}
 
-		const auto classic = knapsackdp(weights, values, capacity, 1);
-		const auto dag = knapsackdpdag(weights, values, capacity, 1);
+	const auto classic = knapsackdp(weights, values, capacity);
+		const auto dag = knapsackdpdag(weights, values, capacity);
 
 		EXPECT_EQ(dag.totalValue, classic.totalValue) << "trial=" << trial;
 		EXPECT_LE(dag.totalWeight, capacity) << "trial=" << trial;
