@@ -18,11 +18,11 @@ TEST(KnapsackDP, MultipleThreadsFindOptimalValue)
 
 TEST(Prune, SingleThreadKeepsValidBlockPairs)
 {
-	std::vector<CopaSubset> A{CopaSubset{{}, 1, 10}, CopaSubset{{}, 3, 30}, CopaSubset{{}, 5, 50},
-							  CopaSubset{{}, 7, 70}};
+	std::vector<CopaSubset> A{CopaSubset{1, 10, 0}, CopaSubset{3, 30, 0}, CopaSubset{5, 50, 0},
+							  CopaSubset{7, 70, 0}};
 
-	std::vector<CopaSubset> B{CopaSubset{{}, 8, 80}, CopaSubset{{}, 6, 60}, CopaSubset{{}, 4, 40},
-							  CopaSubset{{}, 2, 20}};
+	std::vector<CopaSubset> B{CopaSubset{8, 80, 0}, CopaSubset{6, 60, 0}, CopaSubset{4, 40, 0},
+							  CopaSubset{2, 20, 0}};
 
 	std::vector<std::pair<CopaBlock, CopaBlock>> blocks;
 	std::vector<CopaBlock> blocksA(1);
@@ -56,11 +56,11 @@ TEST(Prune, SingleThreadKeepsValidBlockPairs)
 
 TEST(Prune, MultiThreadPrunesAndKeepsCorrectly)
 {
-	std::vector<CopaSubset> A{CopaSubset{{}, 1, 10}, CopaSubset{{}, 2, 20}, CopaSubset{{}, 3, 30},
-							  CopaSubset{{}, 4, 40}};
+	std::vector<CopaSubset> A{CopaSubset{1, 10, 0}, CopaSubset{2, 20, 0}, CopaSubset{3, 30, 0},
+							  CopaSubset{4, 40, 0}};
 
-	std::vector<CopaSubset> B{CopaSubset{{}, 5, 50}, CopaSubset{{}, 4, 40}, CopaSubset{{}, 3, 30},
-							  CopaSubset{{}, 2, 20}};
+	std::vector<CopaSubset> B{CopaSubset{5, 50, 0}, CopaSubset{4, 40, 0}, CopaSubset{3, 30, 0},
+							  CopaSubset{2, 20, 0}};
 
 	std::vector<std::pair<CopaBlock, CopaBlock>> blocks;
 	std::vector<CopaBlock> blocksA(2);

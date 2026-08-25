@@ -1,5 +1,6 @@
 #include "Knapsack/knapsack.hpp"
 #include "Knapsackmpi/knapsackmpi.hpp"
+#include "time.hpp"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <iostream>
@@ -107,4 +108,16 @@ PYBIND11_MODULE(libdistributed_knapsack, m)
 	m.def("knapsackcopampi", &knapsackcopampisolver, py::arg("args"));
 	m.def("knapsackdpmpi", &knapsackdpmpisolver, py::arg("args"));
 	m.def("disable_logging", &disable_logging);
+	py::class_<TimeSection>(m, "TimeSection")
+		.def_readonly("min", &TimeSection::min)
+		.def_readonly("max", &TimeSection::max)
+		.def_readonly("mean", &TimeSection::mean)
+		.def_readonly("variance", &TimeSection::variance)
+		.def_readonly("count", &TimeSection::count);
+	m.def("get_section", [](const std::string &name) {
+		return TimeSectionRegister::instance().get_section(name);
+	}, py::arg("name"));
+	m.def("get_all_sections", []() {
+		return TimeSectionRegister::instance().get_all_sections();
+	});
 }
