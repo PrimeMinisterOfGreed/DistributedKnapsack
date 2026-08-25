@@ -18,7 +18,7 @@ def test_knapsackdp():
     values = [random.randint(1, 50) for x in range(30)]
     capacity = random.randint(1, 1000)
     args = lib.KnapsackArguments(weights, values, capacity)
-    result = lib.knapsackdp(args,1)
+    result = lib.knapsackdp(args)
     print(f"Knapsack result: {result.totalValue}, Total Weight: {result.totalWeight}")
     #result_copa = lib.knapsackcopa(args,16)
    # print(f"Knapsack COPA result: {result_copa.totalValue}, Total Weight: {result_copa.totalWeight}")

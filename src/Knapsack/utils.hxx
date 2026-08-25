@@ -1,6 +1,6 @@
 #pragma once
 #include "Knapsack/knapsackcopa.hpp"
-#include "concepts.tpp"
+#include "concepts.hxx"
 #include "panic.hpp"
 #include "time.hpp"
 #include <algorithm>
@@ -118,7 +118,8 @@ std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r,
 		std::vector<CopaSubset> shifted{subsets.size()};
 		auto [w, v] = item;
 
-		time_block("GenerateCopaSubset::AddItem", [&]() {
+		START_BLOCK("GenerateCopaSubset::AddItem");
+		{
 			if (shifted.size() >= MIN_PARALLEL_SIZE && numthreads > 1)
 			{
 #pragma omp parallel for num_threads(numthreads)
@@ -136,12 +137,14 @@ std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r,
 					shifted[i].addItem(item_idx, w, v);
 				}
 			}
-		});
+		}
+		END_BLOCK("GenerateCopaSubset::AddItem");
 
 		item_idx++;
 		std::vector<CopaSubset> merged;
 		merged.resize(subsets.size() + shifted.size());
-		time_block("GenerateCopaSubset::Merge", [&]() {
+		START_BLOCK("GenerateCopaSubset::Merge");
+		{
 			if (merged.size() >= MIN_PARALLEL_SIZE && numthreads > 1)
 			{
 				parallel_merge(subsets, shifted, merged, numthreads);
@@ -150,7 +153,8 @@ std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r,
 			{
 				std::merge(subsets.begin(), subsets.end(), shifted.begin(), shifted.end(), merged.begin());
 			}
-		});
+		}
+		END_BLOCK("GenerateCopaSubset::Merge");
 
 		subsets = std::move(merged);
 	}
@@ -383,13 +387,12 @@ void prune(const CopaBlockInputRange auto &blocksA, const CopaBlockInputRange au
 void parallel_save_max(const CopaBlockPairingOutRange auto &remainingPairs,
 					   std::ranges::output_range<int> auto &processBestVal,
 					   std::ranges::output_range<int> auto &processBestAIdx,
-					   std::ranges::output_range<int> auto &processBestBIdx, int capacity, int numThreads)
+					   std::ranges::output_range<int> auto &processBestBIdx, int capacity)
 {
-	DBG_ASSERT(numThreads != remainingPairs.size(), "Remaining pairs blocks:{} should be equal to threads:{}",
-			   remainingPairs.size(), numThreads);
+	int m = static_cast<int>(remainingPairs.size());
 
-#pragma omp parallel for num_threads(numThreads)
-	for (int i = 0; i < numThreads; ++i)
+#pragma omp parallel for
+	for (int i = 0; i < m; ++i)
 	{
 		const auto &[blockA, blockB] = remainingPairs[i];
 

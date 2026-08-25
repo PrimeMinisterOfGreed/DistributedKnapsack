@@ -1,5 +1,6 @@
 #pragma once
 #include "Knapsack/knapsack.hpp"
+#include <boost/mpi.hpp>
 #include <optional>
 
 std::optional<KnapsackSolution> knapsackdpmpi(boost::mpi::communicator &comm, const std::vector<int> &weights,

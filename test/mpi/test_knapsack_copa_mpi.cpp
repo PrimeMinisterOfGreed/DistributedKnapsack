@@ -4,7 +4,7 @@
 #include "Knapsack/knapsack.hpp"
 #include "Knapsack/knapsackcopa.hpp"
 #include "Knapsackmpi/knapsackmpi.hpp"
-#include "Knapsackmpi/utils.tpp"
+#include "Knapsackmpi/utils.hxx"
 TEST(CopaSubsetSerialization, BroadcastBetweenNodes)
 {
 	int rank;
@@ -80,24 +80,24 @@ constexpr static MergeTestParam make_basic_merge_param()
 	// A: sorted by weight (non-decreasing)
 	// B: sorted by weight (non-decreasing)
 	std::vector<CopaSubset> a = {
-		CopaSubset{{}, 1, 10},
-		CopaSubset{{}, 4, 40},
-		CopaSubset{{}, 7, 70},
+		CopaSubset{1, 10, 0},
+		CopaSubset{4, 40, 0},
+		CopaSubset{7, 70, 0},
 	};
 	std::vector<CopaSubset> b = {
-		CopaSubset{{}, 2, 20},
-		CopaSubset{{}, 5, 50},
-		CopaSubset{{}, 8, 80},
-		CopaSubset{{}, 9, 90},
+		CopaSubset{2, 20, 0},
+		CopaSubset{5, 50, 0},
+		CopaSubset{8, 80, 0},
+		CopaSubset{9, 90, 0},
 	};
 	std::vector<CopaSubset> expected = {
-		CopaSubset{{}, 1, 10},
-		CopaSubset{{}, 2, 20},
-		CopaSubset{{}, 4, 40},
-		CopaSubset{{}, 5, 50},
-		CopaSubset{{}, 7, 70},
-		CopaSubset{{}, 8, 80},
-		CopaSubset{{}, 9, 90},
+		CopaSubset{1, 10, 0},
+		CopaSubset{2, 20, 0},
+		CopaSubset{4, 40, 0},
+		CopaSubset{5, 50, 0},
+		CopaSubset{7, 70, 0},
+		CopaSubset{8, 80, 0},
+		CopaSubset{9, 90, 0},
 	};
 	return {std::move(a), std::move(b), std::move(expected)};
 }
@@ -106,8 +106,8 @@ constexpr static MergeTestParam make_empty_a_param()
 {
 	std::vector<CopaSubset> a;
 	std::vector<CopaSubset> b = {
-		CopaSubset{{}, 1, 10},
-		CopaSubset{{}, 3, 30},
+		CopaSubset{1, 10, 0},
+		CopaSubset{3, 30, 0},
 	};
 	std::vector<CopaSubset> expected = b;
 	return {std::move(a), std::move(b), std::move(expected)};
@@ -116,8 +116,8 @@ constexpr static MergeTestParam make_empty_a_param()
 constexpr static MergeTestParam make_empty_b_param()
 {
 	std::vector<CopaSubset> a = {
-		CopaSubset{{}, 2, 20},
-		CopaSubset{{}, 4, 40},
+		CopaSubset{2, 20, 0},
+		CopaSubset{4, 40, 0},
 	};
 	std::vector<CopaSubset> b;
 	std::vector<CopaSubset> expected = a;
@@ -132,30 +132,30 @@ constexpr static MergeTestParam make_both_empty_param()
 constexpr static MergeTestParam make_interleaved_param()
 {
 	std::vector<CopaSubset> a = {
-		CopaSubset{{}, 1, 1},
-		CopaSubset{{}, 3, 3},
-		CopaSubset{{}, 5, 5},
-		CopaSubset{{}, 7, 7},
-		CopaSubset{{}, 9, 9},
+		CopaSubset{1, 1, 0},
+		CopaSubset{3, 3, 0},
+		CopaSubset{5, 5, 0},
+		CopaSubset{7, 7, 0},
+		CopaSubset{9, 9, 0},
 	};
 	std::vector<CopaSubset> b = {
-		CopaSubset{{}, 2, 2},
-		CopaSubset{{}, 4, 4},
-		CopaSubset{{}, 6, 6},
-		CopaSubset{{}, 8, 8},
-		CopaSubset{{}, 10, 10},
+		CopaSubset{2, 2, 0},
+		CopaSubset{4, 4, 0},
+		CopaSubset{6, 6, 0},
+		CopaSubset{8, 8, 0},
+		CopaSubset{10, 10, 0},
 	};
 	std::vector<CopaSubset> expected = {
-		CopaSubset{{}, 1, 1},
-		CopaSubset{{}, 2, 2},
-		CopaSubset{{}, 3, 3},
-		CopaSubset{{}, 4, 4},
-		CopaSubset{{}, 5, 5},
-		CopaSubset{{}, 6, 6},
-		CopaSubset{{}, 7, 7},
-		CopaSubset{{}, 8, 8},
-		CopaSubset{{}, 9, 9},
-		CopaSubset{{}, 10, 10},
+		CopaSubset{1, 1, 0},
+		CopaSubset{2, 2, 0},
+		CopaSubset{3, 3, 0},
+		CopaSubset{4, 4, 0},
+		CopaSubset{5, 5, 0},
+		CopaSubset{6, 6, 0},
+		CopaSubset{7, 7, 0},
+		CopaSubset{8, 8, 0},
+		CopaSubset{9, 9, 0},
+		CopaSubset{10, 10, 0},
 	};
 	return {std::move(a), std::move(b), std::move(expected)};
 }
@@ -318,7 +318,7 @@ TEST(MpiDistributeBlock, BasicDistribution)
 	if (rank == 0)
 	{
 		for (int i = 1; i <= 10; ++i)
-			input.push_back(CopaSubset{{}, i * 10, i * 10});
+			input.push_back(CopaSubset{i * 10, i * 10, 0});
 	}
 	broadcast(comm, input, 0);
 
@@ -353,7 +353,7 @@ TEST(MpiDistributeBlock, UnevenDistribution)
 	if (rank == 0)
 	{
 		for (int i = 1; i <= n; ++i)
-			input.push_back(CopaSubset{{}, i, i * 10});
+			input.push_back(CopaSubset{i, i * 10, 0});
 	}
 	broadcast(comm, input, 0);
 
@@ -392,7 +392,7 @@ TEST(MpiDistributeBlock, MaxValueCorrectlyComputed)
 		// Values: 10, 50, 30, 70, 20, 80
 		// With 2 processes: rank 0 gets [10, 50, 30], rank 1 gets [70, 20, 80]
 		for (int v : {10, 50, 30, 70, 20, 80})
-			input.push_back(CopaSubset{{}, v, v});
+			input.push_back(CopaSubset{v, v, 0});
 	}
 	broadcast(comm, input, 0);
 
@@ -427,11 +427,11 @@ TEST(MpiPrune, PrunesBlockPairsCorrectly)
 
 	boost::mpi::communicator comm;
 
-	std::vector<CopaSubset> a_subsets{CopaSubset{{}, 1, 5}, CopaSubset{{}, 2, 10}};
+	std::vector<CopaSubset> a_subsets{CopaSubset{1, 5, 0}, CopaSubset{2, 10}, 0};
 	CopaBlock blockA{std::span<const CopaSubset>(a_subsets), 10};
 
-	std::vector<CopaSubset> b1_subsets{CopaSubset{{}, 1, 5}, CopaSubset{{}, 2, 10}};
-	std::vector<CopaSubset> b2_subsets{CopaSubset{{}, 3, 15}};
+	std::vector<CopaSubset> b1_subsets{CopaSubset{1, 5, 0}, CopaSubset{2, 10}, 0};
+	std::vector<CopaSubset> b2_subsets{CopaSubset{3, 15}, 0};
 	std::vector<CopaBlock> blocksB{
 		CopaBlock{std::span<const CopaSubset>(b1_subsets), 10},
 		CopaBlock{std::span<const CopaSubset>(b2_subsets), 15},
@@ -465,12 +465,12 @@ TEST(MpiPrune, PrunesWhenAllPairsValid)
 
 	boost::mpi::communicator comm;
 
-	std::vector<CopaSubset> a_subsets{CopaSubset{{}, 1, 5}, CopaSubset{{}, 2, 10}, CopaSubset{{}, 3, 15}};
+	std::vector<CopaSubset> a_subsets{CopaSubset{1, 5, 0}, CopaSubset{2, 10, 0}, CopaSubset{3, 15}, 0};
 	CopaBlock blockA{std::span<const CopaSubset>(a_subsets), 15};
 
-	std::vector<CopaSubset> b1_subsets{CopaSubset{{}, 1, 5}};
-	std::vector<CopaSubset> b2_subsets{CopaSubset{{}, 2, 10}, CopaSubset{{}, 3, 15}};
-	std::vector<CopaSubset> b3_subsets{CopaSubset{{}, 1, 3}};
+	std::vector<CopaSubset> b1_subsets{CopaSubset{1, 5}, 0};
+	std::vector<CopaSubset> b2_subsets{CopaSubset{2, 10, 0}, CopaSubset{3, 15}, 0};
+	std::vector<CopaSubset> b3_subsets{CopaSubset{1, 3}, 0};
 	std::vector<CopaBlock> blocksB{
 		CopaBlock{std::span<const CopaSubset>(b1_subsets), 5},
 		CopaBlock{std::span<const CopaSubset>(b2_subsets), 15},
@@ -493,11 +493,11 @@ TEST(MpiPrune, PrunesWhenNoPairsValid)
 
 	boost::mpi::communicator comm;
 
-	std::vector<CopaSubset> a_subsets{CopaSubset{{}, 10, 50}};
+	std::vector<CopaSubset> a_subsets{CopaSubset{10, 50}, 0};
 	CopaBlock blockA{std::span<const CopaSubset>(a_subsets), 50};
 
-	std::vector<CopaSubset> b1_subsets{CopaSubset{{}, 10, 50}};
-	std::vector<CopaSubset> b2_subsets{CopaSubset{{}, 15, 60}};
+	std::vector<CopaSubset> b1_subsets{CopaSubset{10, 50}, 0};
+	std::vector<CopaSubset> b2_subsets{CopaSubset{15, 60}, 0};
 	std::vector<CopaBlock> blocksB{
 		CopaBlock{std::span<const CopaSubset>(b1_subsets), 50},
 		CopaBlock{std::span<const CopaSubset>(b2_subsets), 60},

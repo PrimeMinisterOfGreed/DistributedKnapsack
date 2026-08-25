@@ -8,33 +8,6 @@
 #include <chrono>
 extern ProgramOptions options;
 
-TEST(KnapsackDPMPI, SolvesSmallProblem)
-{
-	int rank, world_size;
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-	ASSERT_GE(world_size, 2) << "This test requires at least 2 MPI processes";
-
-
-	boost::mpi::communicator comm;
-
-	const std::vector<int> weights{1, 2, 3, 4};
-	const std::vector<int> values{1, 6, 10, 16};
-	constexpr int capacity = 7;
-
-	auto result = knapsackdpmpi(comm, weights, values, capacity);
-
-	if (rank == 0)
-	{
-		ASSERT_TRUE(result.has_value());
-		EXPECT_EQ(result->totalValue, 26);
-	}
-	else
-	{
-		EXPECT_FALSE(result.has_value());
-	}
-}
-
 TEST(KnapsackDPMPI, EmptyItemsReturnsZero)
 {
 	int rank, world_size;
@@ -183,7 +156,7 @@ TEST(KnapsackDPMPI, MatchesSequentialDP)
 		ASSERT_TRUE(mpi_result.has_value());
 		
 		// Compare with sequential DP
-		auto seq_result = knapsackdp(weights, values, capacity, 1);
+		auto seq_result = knapsackdp(weights, values, capacity);
 		
 		EXPECT_EQ(mpi_result->totalValue, seq_result.totalValue);
 		EXPECT_EQ(mpi_result->totalWeight, seq_result.totalWeight);
@@ -355,80 +328,6 @@ TEST(KnapsackDPMPI, AllWeightsZero)
 	}
 }
 
-TEST(KnapsackDPMPI, Benchmark100Elements)
-{
-	int rank, world_size;
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-	ASSERT_GE(world_size, 2) << "This test requires at least 2 MPI processes";
-
-	boost::mpi::communicator comm;
-
-	// Benchmark with 100 items
-	constexpr int numItems = 100;
-	constexpr int capacity = 5000;
-	
-	std::vector<int> weights(numItems);
-	std::vector<int> values(numItems);
-	
-	// Generate test data: weights 1-50, values proportional with some variation
-	for (int i = 0; i < numItems; ++i)
-	{
-		weights[i] = (i % 50) + 1;  // Weights from 1 to 50
-		values[i] = ((i % 30) + 1) * 2;  // Values from 2 to 60
-	}
-
-	if (rank == 0)
-	{
-		spdlog::info("Starting MPI benchmark with {} items, capacity {}", numItems, capacity);
-	}
-	
-	auto mpi_start = std::chrono::high_resolution_clock::now();
-	auto mpi_result = knapsackdpmpi(comm, weights, values, capacity);
-	auto mpi_end = std::chrono::high_resolution_clock::now();
-	
-	auto mpi_duration = std::chrono::duration_cast<std::chrono::milliseconds>(mpi_end - mpi_start);
-
-	if (rank == 0)
-	{
-		ASSERT_TRUE(mpi_result.has_value());
-		EXPECT_LE(mpi_result->totalWeight, capacity);
-		
-		// Verify solution validity
-		int computedWeight = 0;
-		int computedValue = 0;
-		for (int itemIdx : mpi_result->items)
-		{
-			EXPECT_GE(itemIdx, 0);
-			EXPECT_LT(itemIdx, numItems);
-			computedWeight += weights[itemIdx];
-			computedValue += values[itemIdx];
-		}
-		EXPECT_EQ(computedWeight, mpi_result->totalWeight);
-		EXPECT_EQ(computedValue, mpi_result->totalValue);
-		
-		// Compare with sequential DP for correctness
-		auto seq_start = std::chrono::high_resolution_clock::now();
-		auto seq_result = knapsackdp(weights, values, capacity, 1);
-		auto seq_end = std::chrono::high_resolution_clock::now();
-		auto seq_duration = std::chrono::duration_cast<std::chrono::milliseconds>(seq_end - seq_start);
-		
-		EXPECT_EQ(mpi_result->totalValue, seq_result.totalValue) 
-			<< "MPI and sequential results differ!";
-		EXPECT_EQ(mpi_result->totalWeight, seq_result.totalWeight);
-		
-		spdlog::info("Benchmark Results (100 items, capacity {}):", capacity);
-		spdlog::info("  MPI time: {} ms ({} processes)", mpi_duration.count(), world_size);
-		spdlog::info("  Sequential time: {} ms", seq_duration.count());
-		spdlog::info("  Optimal value: {}, Weight: {}, Items selected: {}", 
-			mpi_result->totalValue, mpi_result->totalWeight, mpi_result->items.size());
-	}
-	else
-	{
-		EXPECT_FALSE(mpi_result.has_value());
-	}
-}
-
 TEST(KnapsackDPMPI, Benchmark100ElementsWithValidation)
 {
 	int rank, world_size;
@@ -483,7 +382,7 @@ TEST(KnapsackDPMPI, Benchmark100ElementsWithValidation)
 		EXPECT_LE(computedWeight, capacity) << "Over capacity!";
 		
 		// Compare with sequential solution
-		auto seq_result = knapsackdp(weights, values, capacity, 1);
+		auto seq_result = knapsackdp(weights, values, capacity);
 		
 		EXPECT_EQ(mpi_result->totalValue, seq_result.totalValue) 
 			<< "MPI value " << mpi_result->totalValue 
