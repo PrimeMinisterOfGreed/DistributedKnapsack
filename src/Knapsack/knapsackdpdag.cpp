@@ -98,6 +98,7 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 	if (nb == 0 || nq == 0)
 		return 0;
 
+#pragma omp parallel
 	for (int b = 0; b < nb; ++b)
 	{
 		const int i_start = b * item_block;

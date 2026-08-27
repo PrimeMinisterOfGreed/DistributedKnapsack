@@ -1,9 +1,8 @@
 #include "Knapsack/knapsack.hpp"
-#include "Knapsackmpi/knapsackmpi.hpp"
 #include "time.hpp"
+#include <iostream>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <iostream>
 #include <spdlog/spdlog.h>
 
 namespace py = pybind11;
@@ -38,16 +37,6 @@ KnapsackSolution knapsackdpsolver(KnapsackArguments args)
 	return knapsackdp(args.weights, args.values, args.capacity);
 }
 
-KnapsackSolution knapsackdpmpisolver(KnapsackArguments args)
-{
-	auto comm = boost::mpi::communicator();
-	auto rank = comm.rank();
-	auto res = knapsackdpmpi(comm, args.weights, args.values, args.capacity);
-	if (res.has_value())
-		return res.value();
-	return KnapsackSolution();
-}
-
 KnapsackSolution knapsackcopasolver(KnapsackArguments args)
 {
 	auto res = knapsackcopa(args.weights, args.values, args.capacity);
@@ -62,25 +51,6 @@ KnapsackSolution knapsackcopasequentialsolver(KnapsackArguments args)
 	if (res.has_value())
 		return res.value();
 	return KnapsackSolution();
-}
-
-KnapsackSolution knapsackcopampisolver(KnapsackArguments args)
-{
-	auto comm = boost::mpi::communicator();
-	auto rank = comm.rank();
-	auto res = knapsackcopampi(comm, args.weights, args.values, args.capacity);
-	if (res.has_value())
-		return res.value();
-	else if (!res.has_value() && rank != 0)
-	{
-		std::cerr << "Error: no solution for non root node" << std::endl;
-		return KnapsackSolution();
-	}
-	else
-	{
-		std::cerr << "Error: No solution found by knapsackcopampi" << std::endl;
-		return KnapsackSolution();
-	}
 }
 
 void disable_logging()
@@ -105,8 +75,12 @@ PYBIND11_MODULE(libdistributed_knapsack, m)
 	m.def("knapsackdp", &knapsackdpsolver, py::arg("args"));
 	m.def("knapsackcopa", &knapsackcopasolver, py::arg("args"));
 	m.def("knapsackcopasequential", &knapsackcopasequentialsolver, py::arg("args"));
-	m.def("knapsackcopampi", &knapsackcopampisolver, py::arg("args"));
-	m.def("knapsackdpmpi", &knapsackdpmpisolver, py::arg("args"));
+	m.def(
+		"knapsackdpdag",
+		[](KnapsackArguments args, int item_block, int cap_block) {
+			return knapsackdpdag(args.weights, args.values, args.capacity, item_block, cap_block);
+		},
+		py::arg("args"), py::arg("item_block") = 10, py::arg("cap_block") = 0);
 	m.def("disable_logging", &disable_logging);
 	py::class_<TimeSection>(m, "TimeSection")
 		.def_readonly("min", &TimeSection::min)
@@ -114,10 +88,8 @@ PYBIND11_MODULE(libdistributed_knapsack, m)
 		.def_readonly("mean", &TimeSection::mean)
 		.def_readonly("variance", &TimeSection::variance)
 		.def_readonly("count", &TimeSection::count);
-	m.def("get_section", [](const std::string &name) {
-		return TimeSectionRegister::instance().get_section(name);
-	}, py::arg("name"));
-	m.def("get_all_sections", []() {
-		return TimeSectionRegister::instance().get_all_sections();
-	});
+	m.def(
+		"get_section", [](const std::string &name) { return TimeSectionRegister::instance().get_section(name); },
+		py::arg("name"));
+	m.def("get_all_sections", []() { return TimeSectionRegister::instance().get_all_sections(); });
 }

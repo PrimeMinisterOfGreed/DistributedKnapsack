@@ -7,8 +7,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Optional
 from pathlib import Path
-from mpi4py import MPI  # type: ignore
-from libdistributed_knapsack import KnapsackArguments, KnapsackSolution, knapsackdp, knapsackcopa, knapsackcopasequential, knapsackcopampi, knapsackdpmpi
+from libdistributed_knapsack import KnapsackArguments, KnapsackSolution, knapsackdp, knapsackcopa, knapsackcopasequential, knapsackdpdag
 
 
 class BenchmarkTest(ABC):
@@ -16,8 +15,7 @@ class BenchmarkTest(ABC):
         self.args: KnapsackArguments
         self.numThreads: int = 1
         self.numItems: int = 0
-        self.is_mpi_test: bool = False
-
+        self.testType :str = ""
     @abstractmethod
     def onExecute(self) -> KnapsackSolution:
         pass
@@ -35,10 +33,6 @@ class BenchmarkTest(ABC):
         return end_time - start_time, result
 
 
-def check_mpi_initialized() -> None:
-    if not MPI.Is_initialized():
-        raise RuntimeError("MPI not initialized. Run with mpirun for MPI tests.")
-
 
 class BenchmarkKnapsackDP(BenchmarkTest):
     def onExecute(self) -> KnapsackSolution:
@@ -55,24 +49,14 @@ class BenchmarkKnapsackCOPASerial(BenchmarkTest):
         return knapsackcopasequential(self.args)
 
 
-class BenchmarkKnapsackCOPAMPI(BenchmarkTest):
-    def __init__(self) -> None:
+class BenchmarkKnapsackDPDAG(BenchmarkTest):
+    def __init__(self, item_block: int = 10, cap_block: int = 0) -> None:
         super().__init__()
-        self.is_mpi_test = True
+        self.item_block = item_block
+        self.cap_block = cap_block
 
     def onExecute(self) -> KnapsackSolution:
-        check_mpi_initialized()
-        return knapsackcopampi(self.args)
-
-
-class BenchmarkKnapsackDPMPI(BenchmarkTest):
-    def __init__(self) -> None:
-        super().__init__()
-        self.is_mpi_test = True
-
-    def onExecute(self) -> KnapsackSolution:
-        check_mpi_initialized()
-        return knapsackdpmpi(self.args)
+        return knapsackdpdag(self.args, self.item_block, self.cap_block)
 
 
 class TestRegister:
@@ -97,12 +81,12 @@ class TestRegister:
             
         file_exists = os.path.exists(self._save_file)
         
-        processors = MPI.COMM_WORLD.size if test.is_mpi_test else test.numThreads
-        test_type = "distributed memory" if test.is_mpi_test else "shared memory"
+        processors = test.numThreads
+        test_type = test.testType
         
         with open(self._save_file, mode='a', newline='') as f:
             writer = csv.writer(f)
-            hostname = MPI.Get_processor_name() if test.is_mpi_test else os.uname().nodename
+            hostname = os.uname().nodename
             if not file_exists:
                 writer.writerow(['hostname','testname', 'testtype', 'time', 'processors', 'solution_weight', 'solution_profit', 'capacity', 'num_items'])
             writer.writerow([hostname, test_name, test_type, f"{duration:.4f}", processors, result.totalWeight, result.totalValue, self._capacity, test.numItems])
@@ -117,9 +101,7 @@ class TestRegister:
         
         for test_name, test in tests_to_run.items():
             duration, result = test.execute()
-            if test.is_mpi_test:
-                if MPI.COMM_WORLD.rank != 0:
-                    continue  # Only rank 0 prints results for MPI tests
+
             print(f"{test_name}: {duration:.4f}s | Items: {test.numItems} | "
                   f"Profit: {result.totalValue} | Weight: {result.totalWeight}")
             
