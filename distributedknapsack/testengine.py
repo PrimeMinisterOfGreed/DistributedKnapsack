@@ -7,7 +7,8 @@ import os
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Optional
 from pathlib import Path
-from libdistributed_knapsack import KnapsackArguments, KnapsackSolution, knapsackdp, knapsackcopa, knapsackcopasequential, knapsackdpdag
+from libdistributed_knapsack import (KnapsackArguments, KnapsackSolution, knapsackdp, knapsackcopa,
+                                     knapsackcopasequential, knapsackdpdag, get_all_sections)
 
 
 class BenchmarkTest(ABC):
@@ -104,7 +105,14 @@ class TestRegister:
 
             print(f"{test_name}: {duration:.4f}s | Items: {test.numItems} | "
                   f"Profit: {result.totalValue} | Weight: {result.totalWeight}")
-            
+
+            sections = get_all_sections()
+            if sections:
+                print("  Time sections:")
+                for name, sec in sorted(sections.items()):
+                    print(f"    {name}: count={sec.count} mean={sec.mean:.4f}ms "
+                          f"min={sec.min:.4f}ms max={sec.max:.4f}ms")
+
             if self._save_file:
                 self._append_result(test_name, test, duration, result)
 

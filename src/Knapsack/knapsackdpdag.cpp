@@ -1,6 +1,7 @@
 #include "knapsack.hpp"
 #include "knapsackdpdag_impl.hpp"
 #include <algorithm>
+#include <time.hpp>
 
 Graph build_graph(const std::vector<int> &weights, int capacity, int item_block, int cap_block)
 {
@@ -98,13 +99,35 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 	if (nb == 0 || nq == 0)
 		return 0;
 
-#pragma omp parallel
+	// Assign each tile a longest-path wavefront level. Tiles with the same
+	// level (same anti-diagonal b+q) are mutually independent and can be
+	// computed in parallel; successive levels must be processed serially.
+	compute_levels(g);
+
+	int max_level = 0;
 	for (int b = 0; b < nb; ++b)
-	{
-		const int i_start = b * item_block;
+		for (int q = 0; q < nq; ++q)
+			max_level = std::max(max_level, g[static_cast<std::size_t>(b) * nq + q].level);
+
+	std::vector<std::vector<int>> by_level(static_cast<std::size_t>(max_level) + 1);
+	for (int b = 0; b < nb; ++b)
 		for (int q = 0; q < nq; ++q)
 		{
-			NodeData &nd = g[static_cast<std::size_t>(b) * nq + q];
+			const int lvl = g[static_cast<std::size_t>(b) * nq + q].level;
+			by_level[static_cast<std::size_t>(lvl)].push_back(b * nq + q);
+		}
+
+	for (int L = 0; L <= max_level; ++L)
+	{
+		const std::vector<int> &tiles = by_level[static_cast<std::size_t>(L)];
+#pragma omp parallel for schedule(dynamic)
+		for (std::size_t t = 0; t < tiles.size(); ++t)
+		{
+			const int idx = tiles[t];
+			const int b = idx / nq;
+			const int q = idx % nq;
+			const int i_start = b * item_block;
+			NodeData &nd = g[static_cast<std::size_t>(idx)];
 			const int rows = nd.rows;
 			const int width = nd.width;
 			const int rows_local = rows - 1;
@@ -206,8 +229,12 @@ KnapsackSolution knapsackdpdag(const std::vector<int> &weights, const std::vecto
 	if (cap_block == 0)
 		cap_block = std::max(1, (capacity + 1) / 10);
 
+	START_BLOCK("GraphBuild");
 	Graph g = build_graph(weights, capacity, item_block, cap_block);
+	END_BLOCK("GraphBuild");
+	START_BLOCK("Dag Solve");
 	const int bestValue = solve_dag(g, weights, values, capacity, item_block, cap_block);
+	END_BLOCK("Dag Solve");
 	const std::vector<int> items = reconstruct_items(g, weights, values, capacity, item_block, cap_block);
 
 	int totalWeight = 0;
