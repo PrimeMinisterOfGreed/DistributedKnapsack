@@ -1,5 +1,6 @@
 #import "@preview/algorithmic:1.0.7"
-#import algorithmic: algorithm-figure, style-algorithm
+#import algorithmic: Line, algorithm-figure, style-algorithm
+#import "@preview/codelst:2.0.2": sourcecode
 #show: style-algorithm.with(hlines: (
   grid.hline(stroke: 0.5pt + luma(150)),
   grid.hline(stroke: 0.5pt + luma(150)),
@@ -19,35 +20,10 @@
 #show figure.where(kind: "algorithm"): set figure(supplement: [Algoritmo])
 
 // Helpers for the algorithmic package
-#let reqline(body) = Line[#text(style: "italic")[Require: ] #body]
-#let ensureline(body) = Line[#text(style: "italic")[Ensure: ] #body]
-#let states(..parts) = Line[#parts.join(", ")]
+#let reqline(body) = Line(text(body, style: "italic"))
+#let ensureline(body) = Line(text(body, style: "italic"))
+#let states(..parts) = Line(parts.pos().join(","))
 
-// C++ code listing with line numbers
-#let codelisting(caption, srcraw, lang: "cpp") = {
-  let lines = srcraw.text.split("\n")
-  if lines.last() == "" { lines = lines.slice(0, lines.len() - 1) }
-  figure(
-    block(
-      background: luma(242),
-      radius: 4pt,
-      inset: 8pt,
-      grid(
-        columns: (auto, 1fr),
-        column-gutter: 8pt,
-        ..lines
-          .enumerate()
-          .map(x => (
-            text(size: 7pt, fill: luma(150))[#(x.at(0) + 1)],
-            raw(x.at(1), lang: lang, size: 8pt, block: false),
-          ))
-          .flatten(),
-      ),
-    ),
-    caption: caption,
-    kind: "listing",
-  )
-}
 
 #align(center)[
   #text(size: 17pt, weight: "bold")[Knapsack distribuito: implementazione, comparazione e analisi]
@@ -84,15 +60,15 @@ La prima soluzione più semplice e meno ottimale ha complessità temporale $O(2^
     import algorithmic: *
     reqline[$"profits"$, $"weights"$, $"max_weight"$, $"index"$]
     ensureline[Profitto massimo ottenibile]
-    If([$index = 0$ *or* $max_weight = 0$], {
+    If($"index" = 0 space "or" space "max_weight" = 0$, {
       Return[$0$]
     })
-    Assign[$pick$][$0$]
-    If([$weights[index - 1] <= max_weight$], {
-      Assign[$pick$][$profits[index - 1] + #Call[Knapsack][$max_weight - weights[index - 1]$, $profits$, $weights$, $index - 1$]$]
+    Assign[$"pick"$][$0$]
+    If($"weights"["index" - 1] <= "max_weight"$, {
+      Assign[$"pick"$][$"profits"["index" - 1] + #Call[Knapsack][$"max_weight" - "weights"["index" - 1]$, $"profits"$, $"weights"$, $"index" - 1$]$]
     })
-    Assign[$not_pick$][$#Call[Knapsack][$max_weight$, $profits$, $weights$, $index - 1$]$]
-    Return[op("max")($pick$, $not_pick$)]
+    Assign[$"not_pick"$][$#Call[Knapsack][$"max_weight"$, $"profits"$, $"weights"$, $"index" - 1$]$]
+    Return[op("max")($"pick"$, $"not_pick"$)]
   },
 ) <alg:knapsack-rec>
 
@@ -104,21 +80,21 @@ ha una complessità temporale e spaziale $O(n * W)$
   "Knapsack 0/1 Top-Down (memoization)",
   {
     import algorithmic: *
-    reqline[$profits$, $weights$, $max_weight$, $index$, $table$]
+    reqline[$"profits"$, $"weights"$, $"max_weight"$, $"index"$, $"table"$]
     ensureline[Profitto massimo ottenibile]
-    If([$index = 0$ *or* $max_weight = 0$], {
+    If($"index" = 0 space "or" space "max_weight" = 0$, {
       Return[$0$]
     })
-    If([$table[index][max_weight] != -1$], {
-      Return[$table[index][max_weight]$]
+    If($"table"["index"]["max_weight"] != -1$, {
+      Return[$"table"["index"]["max_weight"]$]
     })
-    Assign[$pick$][$0$]
-    If($weights[index - 1] <= max_weight$, {
-      Assign[$pick$][$profits[index - 1] + #Call[Knapsack][$max_weight - weights[index - 1]$, $profits$, $weights$, $index - 1$, $table$]$]
+    Assign[$"pick"$][$0$]
+    If($"weights"["index" - 1] <= "max_weight"$, {
+      Assign[$"pick"$][$"profits"["index" - 1] + #Call[Knapsack][$"max_weight" - "weights"["index" - 1]$, $"profits"$, $"weights"$, $"index" - 1$, $"table"$]$]
     })
-    Assign[$not_pick$][$#Call[Knapsack][$max_weight$, $profits$, $weights$, $index - 1$, $table$]$]
-    Assign[$table[index][max_weight]$][op("max")($pick$, $not_pick$)]
-    Return[$table[index][max_weight]$]
+    Assign[$"not_pick"$][$#Call[Knapsack][$"max_weight"$, $"profits"$, $"weights"$, $"index" - 1$, $"table"$]$]
+    Assign[$"table"["index"]["max_weight"]$][op("max")($"pick"$, $"not_pick"$)]
+    Return[$"table"["index"]["max_weight"]$]
   },
 ) <alg:knapsack-memo>
 
@@ -128,28 +104,28 @@ la seconda è una versione bottom-up (tabulation) con la medesima complessità m
   "Knapsack 0/1 Bottom-Up (tabulation)",
   {
     import algorithmic: *
-    reqline[$profits$, $weights$, $max_weight$, $len$]
+    reqline[$"profits"$, $"weights"$, $"max_weight"$, $"len"$]
     ensureline[Profitto massimo ottenibile]
-    Assign[$table$][Call[Matrix][$len + 1$, $max_weight + 1$]]
-    For([$i \gets 0$ *to* $len$], {
-      For([$j \gets 0$ *to* $max_weight$], {
+    Assign[$"table"$][Call[Matrix][$"len" + 1$, $"max_weight" + 1$]]
+    For($"i" <- 0 space "to" space "len"$, {
+      For($"j" <- 0 space "to" space "max_weight"$, {
         If(
-          [$i = 0$ *or* $j = 0$],
+          $"i" = 0 space "or" space "j" = 0$,
           {
-            Assign[$table[i][j]$][$0$]
+            Assign[$"table"[i][j]$][$0$]
           },
           {
-            Assign[$pick$][$0$]
-            If($weights[i - 1] <= j$, {
-              Assign[$pick$][$profits[i - 1] + table[i - 1][j - weights[i - 1]]$]
+            Assign[$"pick"$][$0$]
+            If($"weights"[i - 1] <= j$, {
+              Assign[$"pick"$][$"profits"[i - 1] + "table"[i - 1][j - "weights"[i - 1]]$]
             })
-            Assign[$not_pick$][$table[i - 1][j]$]
-            Assign[$table[i][j]$][op("max")($pick$, $not_pick$)]
+            Assign[$"not_pick"$][$"table"[i - 1][j]$]
+            Assign[$"table"[i][j]$][op("max")($"pick"$, $"not_pick"$)]
           },
         )
       })
     })
-    Return[$table[len][max_weight]$]
+    Return[$"table"["len"]["max_weight"]$]
   },
 ) <alg:knapsack-tab>
 
@@ -159,15 +135,15 @@ Una soluzione più raffinata di questa prevede di usare solo l'ultima riga calco
   "Knapsack 0/1 Bottom-Up (spazio ottimizzato)",
   {
     import algorithmic: *
-    reqline[$profits$, $weights$, $max_weight$, $len$]
+    reqline[$"profits"$, $"weights"$, $"max_weight"$, $"len"$]
     ensureline[Profitto massimo ottenibile]
-    Assign[$table$][Call[array][$0 dots max_weight$] inizializzato a 0]
-    For([$i \gets 1$ *to* $len$], {
-      For([$j \gets max_weight$ *downto* $weights[i - 1]$], {
-        Assign[$table[j]$][op("max")($table[j]$, $table[j - weights[i - 1]] + profits[i - 1]$)]
+    Assign[$"table"$][Call[array][$0 dots "max_weight"$] inizializzato a 0]
+    For($"i" <- 1 space "to" space "len"$, {
+      For($"j" <- "max_weight" space "downto" space "weights"[i - 1]$, {
+        Assign[$"table"[j]$][op("max")($"table"[j]$, $"table"[j - "weights"[i - 1]] + "profits"[i - 1]$)]
       })
     })
-    Return[$table[max_weight]$]
+    Return[$"table"["max_weight"]$]
   },
 ) <alg:knapsack-opt>
 
@@ -185,25 +161,25 @@ della capacità rimanente.
   "Fractional Knapsack (Greedy)",
   {
     import algorithmic: *
-    reqline[$profits$, $weights$, $max_weight$, $len$]
+    reqline[$"profits"$, $"weights"$, $"max_weight"$, $"len"$]
     ensureline[Profitto massimo ottenibile]
-    Assign[$items$][Call[sort][Call[zip][$profits$, $weights$], key = $("profit")/("weight")$ *decrescente*]]
-    Assign[$profit$][$0.0$]
-    Assign[$current_capacity$][$max_weight$]
-    For([$i \gets 0$ *to* $len - 1$], {
+    Assign[$"items"$][Call[sort][Call[zip][$"profits"$, $"weights"$], key = $("profit")/("weight")$ *decrescente*]]
+    Assign[$"profit"$][$0.0$]
+    Assign[$"current_capacity"$][$"max_weight"$]
+    For($"i" <- 0 space "to" space "len" - 1$, {
       If(
-        $items[i].weight <= current_capacity$,
+        $"items"[i] dot "weight" <= "current_capacity"$,
         {
-          Assign[$profit$][$profit + items[i].profit$]
-          Assign[$current_capacity$][$current_capacity - items[i].weight$]
+          Assign[$"profit"$][$"profit" + "items"[i] dot "profit"$]
+          Assign[$"current_capacity"$][$"current_capacity" - "items"[i] dot "weight"$]
         },
         {
-          Assign[$profit$][$profit + (items[i].profit)/(items[i].weight) times current_capacity$]
-          Break()
+          Assign[$"profit"$][$"profit" + ("items"[i] dot "profit")/("items"[i] dot "weight") times "current_capacity"$]
+          Break
         },
       )
     })
-    Return[$profit$]
+    Return[$"profit"$]
   },
 ) <alg:fknapsack>
 
@@ -225,31 +201,31 @@ che prenderà in input le due liste ordinate.
   {
     import algorithmic: *
     reqline[Due liste ordinate $A$ e $B$]
-    ensureline[Soluzione finale $Bestvalue$ e $X$]
-    Line[Inizializza $MaxB_N \gets b_N.p$, $L_N \gets N$, $Bestvalue \gets 0$, $X_1 \gets (0, 0)$]
-    For([$i \gets N - 1$ *downto* $1$], {
+    ensureline[Soluzione finale $"Bestvalue"$ e $X$]
+    Line[Inizializza $"MaxB"_N <- b_N dot "p"$, $"L"_N <- N$, $"Bestvalue" <- 0$, $"X"_1 <- (0, 0)$]
+    For($"i" <- N - 1 space "downto" space 1$, {
       If(
-        [$b_i.p > MaxB_(i+1)$],
+        $b_i dot "p" > "MaxB"_(i+1)$,
         {
-          states[$MaxB_i \gets b_i.p$ *and* $L_i \gets i$]
+          states[$"MaxB"_i <- b_i dot "p" space "and" space "L"_i <- i$]
         },
         {
-          states[$MaxB_i \gets MaxB_(i+1)$ *and* $L_i \gets L_(i+1)$]
+          states[$"MaxB"_i <- "MaxB"_(i+1) space "and" space "L"_i <- "L"_(i+1)$]
         },
       )
     })
-    states[$i \gets 1$ *and* $j \gets 1$]
-    While([$i <= N$ *and* $j <= N$], {
-      If([$a_i.w + b_j.w > c$], {
-        states[$j \gets j + 1$ *and continue*]
+    states[$i <- 1 space "and" space j <- 1$]
+    While($i <= N space "and" space j <= N$, {
+      If($a_i dot "w" + b_j dot "w" > c$, {
+        states[$j <- j + 1 space "and" space "continue"$]
       })
-      If($a_i.p + MaxB_j > Bestvalue$, {
-        states[$Bestvalue \gets a_i.p + MaxB_j$ *and* $X_1 \gets (a_i, b_(L_j))$]
+      If($a_i dot "p" + "MaxB"_j > "Bestvalue"$, {
+        states[$"Bestvalue" <- a_i dot "p" + "MaxB"_j space "and" space "X"_1 <- (a_i, b_(L_j))$]
       })
       Assign[$i$][$i + 1$]
     })
-    Line[Converti le due componenti decimali di $X_1$ in due numeri binari: $X_1 \gets (binary_1, binary_2)$]
-    LineComment(Assign[$X$][Call[strcat][$binary_1$, $binary_2$]], [Concatena i due binari])
+    Line[Converti le due componenti decimali di $X_1$ in due numeri binari: $X_1 <- ("binary"_1, "binary"_2)$]
+    LineComment(Assign[$X$][Call["strcat"][$"binary"_1$, $"binary"_2$]], [Concatena i due binari])
   },
 ) <alg:cap>
 
@@ -266,16 +242,16 @@ L'algoritmo sfrutta prima un'algoritmo di generazione parallela delle liste A e 
   "Algoritmo parallelo di generazione",
   {
     import algorithmic: *
-    reqline[Elementi $(v_i, v_i.w, v_i.p)$, $i = 1, 2, dots, n\/2$]
+    reqline[Elementi $(v_i, v_i dot "w", v_i dot "p")$, $i = 1, 2, dots, n/2$]
     ensureline[Lista ordinata $A_(n/2)$ (i.e. $A$)]
-    Line[Inizializza $A_0 \gets [(0, 0, 0)]$ e $IC \gets 1$]
-    For($i \gets 0$ * to * $n\/2 - 1$, {
-      Assign[$v_(i+1)$][$IC$]
+    Line[Inizializza $A_0 <- [(0, 0, 0)]$ e $"IC" <- 1$]
+    For($i <- 0 space "to" space n/2 - 1$, {
+      Assign[$v_(i+1)$][$"IC"$]
       For([#strong[all] $P_j$, $1 <= j <= k$, #strong[in parallel]], {
-        Line[Genera nuova lista $A'_i$ aggiungendo la tripletta $(v_(i+1), v_(i+1).w, v_(i+1).p)$ a tutti gli elementi della lista ordinata $A_i$]
+        Line[Genera nuova lista $A'_i$ aggiungendo la tripletta $(v_(i+1), v_(i+1) dot "w", v_(i+1) dot "p")$ a tutti gli elementi della lista ordinata $A_i$]
         Line[Chiama l'algoritmo di merge parallelo per unire $A_i$ e $A'_i$ in ordine non decrescente di peso, producendo la lista ordinata $A_(i+1)$]
       })
-      Assign[$IC$][$IC + 1$]
+      Assign[$"IC"$][$"IC" + 1$]
     })
   },
 ) <alg:parallel_gen>
@@ -292,16 +268,16 @@ A questo punto si può passare a dividere equamente tra i processori disponibili
   {
     import algorithmic: *
     reqline[Due liste ordinate $A$ e $B$]
-    ensureline[$MaxA$ e $MaxB$]
+    ensureline[$"MaxA"$ e $"MaxB"$]
     Line[Dividi sia $A$ che $B$ uniformemente in $k$ blocchi]
     For([#strong[all] $P_i$, $1 <= i <= k$, #strong[in parallel]], {
-      states[$MaxA_i \gets a_(i,1).p$, $MaxB_i \gets b_(i,1).p$]
-      For([$j \gets 2$ *to* $e$], {
-        If([$a_(i,j).p > MaxA_i$], {
-          Assign[$MaxA_i$][$a_(i,j).p$]
+      states[$"MaxA"_i <- a_(i,1) dot "p"$, $"MaxB"_i <- b_(i,1) dot "p"$]
+      For($j <- 2 space "to" space e$, {
+        If($a_(i,j) dot "p" > "MaxA"_i$, {
+          Assign[$"MaxA"_i$][$a_(i,j) dot "p"$]
         })
-        If($b_(i,j).p > MaxB_i$, {
-          Assign[$MaxB_i$][$b_(i,j).p$]
+        If($b_(i,j) dot "p" > "MaxB"_i$, {
+          Assign[$"MaxB"_i$][$b_(i,j) dot "p"$]
         })
       })
     })
@@ -315,26 +291,26 @@ Ora lo spazio delle soluzioni è davvero molto grande, per questo motivo si rico
   {
     import algorithmic: *
     reqline[Due liste di blocchi $A = {A_1, A_2, dots, A_k}$ e $B = {B_1, B_2, dots, B_k}$, capacità $c$]
-    ensureline[Insieme di coppie di blocchi non potate $remaining$]
-    Line[Inizializza $remaining \gets emptyset$]
+    ensureline[Insieme di coppie di blocchi non potate $"remaining"$]
+    Line[Inizializza $"remaining" <- emptyset$]
     For([#strong[all] $P_i$, $1 <= i <= k$, #strong[in parallel]], {
-      Line[Inizializza $local_results \gets emptyset$]
-      For([$j \gets i$ *to* $k + i - 1$], {
-        Assign[$b_idx$][$j mod k$]
-        Assign[$Z$][$A_i."front".w + B_(b_idx)."back".w$]
-        Assign[$Y$][$A_i."back".w + B_(b_idx)."front".w$]
-        If([$Y <= c$], {
+      Line[Inizializza $"local_results" <- emptyset$]
+      For($j <- i space "to" space k + i - 1$, {
+        Assign[$"b_idx"$][$j "mod" k$]
+        Assign[$Z$][$A_i dot "front" dot "w" + B_("b_idx") dot "back" dot "w"$]
+        Assign[$Y$][$A_i dot "back" dot "w" + B_("b_idx") dot "front" dot "w"$]
+        If($Y <= c$, {
           Comment[Tutte le coppie nel blocco sono valide]
-          If([$A_i."maxValue" + B_(b_idx)."maxValue" > best_value$], {
-            Assign[$best_value$][$A_i."maxValue" + B_(b_idx)."maxValue"$]
+          If($A_i dot "maxValue" + B_("b_idx") dot "maxValue" > "best_value"$, {
+            Assign[$"best_value"$][$A_i dot "maxValue" + B_("b_idx") dot "maxValue"$]
           })
-          states[$local_results."add"(A_i, B_(b_idx))$]
+          states[$"local_results" dot "add"(A_i, B_("b_idx"))$]
         })
         ElseIf(
-          [$Z <= c$ *and* $Y > c$],
+          $Z <= c space "and" space Y > c$,
           {
             Comment[Alcune coppie potrebbero essere valide]
-            states[$local_results."add"(A_i, B_(b_idx))$]
+            states[$"local_results" dot "add"(A_i, B_("b_idx"))$]
           },
           {
             Comment[$Z > c$: nessuna coppia valida, pota il blocco]
@@ -343,7 +319,7 @@ Ora lo spazio delle soluzioni è davvero molto grande, per questo motivo si rico
         )
       })
     })
-    Line[$remaining \gets union_(i = 1)^k local_results_i$]
+    Line[$"remaining" <- union_(i = 1)^k "local_results"_i$]
   },
 ) <alg:parallel_pruning>
 
@@ -361,25 +337,25 @@ A questo punto è possibile passare alla ricerca parallela della soluzione. L'al
 
 === Secondo salvataggio parallelo dei massimi
 
-Dopo il pruning, al più $2k - 1$ coppie di blocchi vengono distribuite equamente tra i $k$ processori: ogni processore $P_i$ gestisce al massimo $s <= 2$ coppie. Per ogni blocco $B_(it)$ assegnato, si calcola un array di #emph[*suffix max*]: $Max_(i:j)[t]$ rappresenta il profitto massimo tra tutti gli elementi da posizione $j$ a $e$ del blocco $B_(it)$, mentre $L^t_j$ rappresenta l'indice del massimo trovato.
+Dopo il pruning, al più $2k - 1$ coppie di blocchi vengono distribuite equamente tra i $k$ processori: ogni processore $P_i$ gestisce al massimo $s <= 2$ coppie. Per ogni blocco $B_("it")$ assegnato, si calcola un array di #emph[*suffix max*]: $"Max"_(i:j)[t]$ rappresenta il profitto massimo tra tutti gli elementi da posizione $j$ a $e$ del blocco $B_("it")$, mentre $L^t_j$ rappresenta l'indice del massimo trovato.
 
 #algorithm-figure(
   "Secondo salvataggio parallelo dei massimi (suffix max)",
   {
     import algorithmic: *
     reqline[Coppie di blocchi rimanenti dopo il pruning]
-    ensureline[$Max_(i:j)[t]$ e $L^t_j$ per ogni blocco $B_(it)$]
+    ensureline[$"Max"_(i:j)[t]$ e $L^t_j$ per ogni blocco $B_("it")$]
     For([#strong[all] $P_i$, $1 <= i <= k$, #strong[in parallel]], {
-      For([$t \gets 0$ *to* $s - 1$], {
-        states[$Max_(i:e)[t] \gets b_(it:e).p$, $L^t_e \gets e$]
-        For([$j \gets e - 1$ *downto* $1$], {
+      For($t <- 0 space "to" space s - 1$, {
+        states[$"Max"_(i:e)[t] <- b_("it":e) dot "p"$, $L^t_e <- e$]
+        For($j <- e - 1 space "downto" space 1$, {
           If(
-            [$b_(it:j).p > Max_(i:(j+1))[t]$],
+            $b_("it":j) dot "p" > "Max"_(i:(j+1))[t]$,
             {
-              states[$Max_(i:j)[t] \gets b_(it:j).p$, $L^t_j \gets j$]
+              states[$"Max"_(i:j)[t] <- b_("it":j) dot "p"$, $L^t_j <- j$]
             },
             {
-              states[$Max_(i:j)[t] \gets Max_(i:(j+1))[t]$, $L^t_j \gets L^t_(j+1)$]
+              states[$"Max"_(i:j)[t] <- "Max"_(i:(j+1))[t]$, $L^t_j <- L^t_(j+1)$]
             },
           )
         })
@@ -392,43 +368,43 @@ Questo pre-calcolo consente, durante la ricerca, di conoscere in $O(1)$ il migli
 
 === Ricerca parallela con two-pointer
 
-Ciascun processore esegue una ricerca #emph[*two-pointer*] sulle proprie coppie di blocchi $(A_i, B_(it))$. Per ogni coppia, due puntatori $x$ (su $A_i$) e $y$ (su $B_(it)$) scorrono i blocchi in direzioni opposte:
+Ciascun processore esegue una ricerca #emph[*two-pointer*] sulle proprie coppie di blocchi $(A_i, B_("it"))$. Per ogni coppia, due puntatori $x$ (su $A_i$) e $y$ (su $B_("it")$) scorrono i blocchi in direzioni opposte:
 
 #algorithm-figure(
   "Ricerca parallela (two-pointer search)",
   {
     import algorithmic: *
     reqline[Coppie di blocchi rimanenti dopo il pruning, suffix max arrays]
-    ensureline[Soluzione finale $Bestvalue$ e $X$]
+    ensureline[Soluzione finale $"Bestvalue"$ e $X$]
     For([#strong[all] $P_i$, $1 <= i <= k$, #strong[in parallel]], {
-      states[$t \gets 0$, $Maxvalue_i \gets 0$, $X_i \gets (0, 0)$]
-      While([$0 <= t <= s - 1$], {
-        Line[Seleziona la coppia di blocchi $(A_i, B_(it))$]
-        states[$x \gets 1$, $y \gets 1$]
-        While([$x <= e$ *and* $y <= e$], {
-          If([$a_(i:x).w + b_(it:y).w > c$], {
-            states[$y \gets y + 1$ *and continue*]
+      states[$t <- 0$, $"Maxvalue"_i <- 0$, $X_i <- (0, 0)$]
+      While($0 <= t <= s - 1$, {
+        Line[Seleziona la coppia di blocchi $(A_i, B_("it"))$]
+        states[$x <- 1$, $y <- 1$]
+        While($x <= e space "and" space y <= e$, {
+          If($a_(i:x) dot "w" + b_("it":y) dot "w" > c$, {
+            states[$y <- y + 1 space "and" space "continue"$]
           })
-          If([$a_(i:x).p + Max_(i:y)[t] > Maxvalue_i$], {
-            Assign[$Maxvalue_i$][$a_(i:x).p + Max_(i:y)[t]$]
-            Assign[$X_i$][$(a_(i:x), b_(it:L^t_y))$]
+          If($a_(i:x) dot "p" + "Max"_(i:y)[t] > "Maxvalue"_i$, {
+            Assign[$"Maxvalue"_i$][$a_(i:x) dot "p" + "Max"_(i:y)[t]$]
+            Assign[$X_i$][$(a_(i:x), b_("it":L^t_y))$]
           })
           Assign[$x$][$x + 1$]
         })
         Assign[$t$][$t + 1$]
       })
     })
-    Line[*Riduzione globale:* $Bestvalue \gets Maxvalue_1$, $X \gets X_1$]
-    For($i \gets 2$ * to * $k$, {
-      If($Bestvalue < Maxvalue_i$, {
-        states[$Bestvalue \gets Maxvalue_i$, $X \gets X_i$]
+    Line[*Riduzione globale:* $"Bestvalue" <- "Maxvalue"_1$, $X <- X_1$]
+    For($i <- 2 space "to" space k$, {
+      If($"Bestvalue" < "Maxvalue"_i$, {
+        states[$"Bestvalue" <- "Maxvalue"_i$, $X <- X_i$]
       })
     })
     Line[Converti le componenti di $X$ in binario e concatena per ottenere la soluzione finale]
   },
 ) <alg:parallel_search>
 
-La logica è la seguente: poiché $A_i$ è ordinato per peso crescente e $B_(it)$ per peso decrescente, quando la somma dei pesi supera la capacità $c$, si incrementa $y$ per passare a un elemento più leggero in $B$. Quando invece la somma è ammissibile, il profitto candidato si calcola come $a_(i:x).p + Max_(i:y)[t]$, dove $Max_(i:y)[t]$ rappresenta il miglior profitto ottenibile da $y$ in poi nel blocco $B_(it)$. Questo evita di dover iterare su tutte le coppie di elementi, riducendo la complessità a $O(e) = O(N\/k)$.
+La logica è la seguente: poiché $A_i$ è ordinato per peso crescente e $B_("it")$ per peso decrescente, quando la somma dei pesi supera la capacità $c$, si incrementa $y$ per passare a un elemento più leggero in $B$. Quando invece la somma è ammissibile, il profitto candidato si calcola come $a_(i:x) dot "p" + "Max"_(i:y)[t]$, dove $"Max"_(i:y)[t]$ rappresenta il miglior profitto ottenibile da $y$ in poi nel blocco $B_("it")$. Questo evita di dover iterare su tutte le coppie di elementi, riducendo la complessità a $O(e) = O(N/k)$.
 
 La complessità complessiva dello stage di ricerca parallela è $O(4N\/k + k)$, che nel caso $k = O(N^(1\/2))$ diventa $O(2^(n\/4))$.
 
@@ -440,23 +416,26 @@ l'esperimento si divide in 4 parti distinte: 1) l'implementazione del algoritmo 
 
 L'implementazione del knapsack in programmazione dinamica sequenziale è decisamente semplice sia nella versione sequenziale che parallela in shared memory:
 
-#codelisting(
-  "Knapsack dynamic programming sequenziale",
-  ```cpp
-  int n = weights.size();
-  std::vector<std::vector<int>> dp(n + 1, std::vector<int>(capacity + 1, 0));
-  // Build the dp table
-  for (int i = 1; i <= n; ++i) {
-      #pragma omp parallel for num_threads(numThreads) // Adjust the number of threads as needed
-      for (int w = 0; w <= capacity; ++w) {
-          if (weights[i - 1] <= w) {
-              dp[i][w] = std::max(dp[i - 1][w], dp[i - 1][w - weights[i - 1]] + values[i - 1]);
-          } else {
-              dp[i][w] = dp[i - 1][w];
-          }
-      }
-  }
-  ```,
+#figure(
+  sourcecode[
+    ```cpp
+    int n = weights.size();
+    std::vector<std::vector<int>> dp(n + 1, std::vector<int>(capacity + 1, 0));
+    // Build the dp table
+    for (int i = 1; i <= n; ++i) {
+        #pragma omp parallel for num_threads(numThreads) // Adjust the number of threads as needed
+        for (int w = 0; w <= capacity; ++w) {
+            if (weights[i - 1] <= w) {
+                dp[i][w] = std::max(dp[i - 1][w], dp[i - 1][w - weights[i - 1]] + values[i - 1]);
+            } else {
+                dp[i][w] = dp[i - 1][w];
+            }
+        }
+    }
+    ```
+  ],
+  caption: "Knapsack dynamic programming sequenziale",
+  kind: "listing",
 )
 
 Questo algoritmo ha una complessità di $O(N * C)$ dove C è la capacità dello zaino, la parallelizzazione avviene scomponendo il ciclo for interno che scrive i valori nella tabella, non è possibile invece parallelizzare il ciclo for più esterno perchè per risolvere la linea successiva bisogna prima calcolare tutti i pesi di quella precedente.
@@ -465,75 +444,81 @@ Questo algoritmo ha una complessità di $O(N * C)$ dove C è la capacità dello 
 
 L'implementazione MPI dell'algoritmo è molto simile, l'approccio seguito è stato quello di assegnare la tabella a un master, che scompone la linea successiva da calcolare in task di equa lunghezza da distribuire ai vari worker.
 
-#codelisting(
-  "Worker task",
-  ```cpp
-  using namespace boost::mpi;
-  int n = static_cast<int>(weights.size());
-  std::vector<uint32_t> line(capacity + 1, 0);
-  for (int i = 1; i <= n; ++i)
-  {
-      broadcast(comm, line.data(), static_cast<int>(line.size()), 0);
-      while (true)
+#figure(
+  sourcecode[
+    ```cpp
+      using namespace boost::mpi;
+      int n = static_cast<int>(weights.size());
+      std::vector<uint32_t> line(capacity + 1, 0);
+      for (int i = 1; i <= n; ++i)
       {
-          NodeTask task{};
-          auto status = comm.recv(any_source, any_tag, task);
-          if (status.tag() == NODETAG::TERMINATE)
+          broadcast(comm, line.data(), static_cast<int>(line.size()), 0);
+          while (true)
           {
-              break;
-          }
-          int len = task.endIndex - task.startIndex + 1;
-          std::vector<uint32_t> result(len);
-          for (int w = task.startIndex; w <= task.endIndex; ++w)
-          {
-              if (weights[i - 1] <= w)
-                  result[w - task.startIndex] = std::max(line[w], line[w - weights[i - 1]] + values[i - 1]);
-              else
-                  result[w - task.startIndex] = line[w];
-          }
+              NodeTask task{};
+              auto status = comm.recv(any_source, any_tag, task);
+              if (status.tag() == NODETAG::TERMINATE)
+              {
+                  break;
+              }
+              int len = task.endIndex - task.startIndex + 1;
+              std::vector<uint32_t> result(len);
+              for (int w = task.startIndex; w <= task.endIndex; ++w)
+              {
+                  if (weights[i - 1] <= w)
+                      result[w - task.startIndex] = std::max(line[w], line[w - weights[i - 1]] + values[i - 1]);
+                  else
+                      result[w - task.startIndex] = line[w];
+              }
 
-          comm.send(status.source(), NODETAG::RESPONSE, NodeResponse{task.startIndex, task.endIndex});
-          comm.send(status.source(), NODETAG::DATA, NodeResponseData{std::move(result)});
+              comm.send(status.source(), NODETAG::RESPONSE, NodeResponse{task.startIndex, task.endIndex});
+              comm.send(status.source(), NODETAG::DATA, NodeResponseData{std::move(result)});
+          }
+          comm.barrier();
       }
-      comm.barrier();
-  }
-  ```,
+    ```
+  ],
+  caption: "Worker task",
+  kind: "listing",
 )
 
 i task sono dei range di indici che il worker deve computare, una volta finito il worker invia al master il blocco appena computato dopodichè il worker attende tutti i nodi alla barriera e si comincia il calcolo per il prossimo oggetto.
 
-#codelisting(
-  "Master Task",
-  ```cpp
-  int n = static_cast<int>(weights.size());
-  std::vector<std::vector<uint32_t>> dp(n + 1, std::vector<uint32_t>(capacity + 1, 0));
-  for (int i = 1; i <= n; ++i)
-  {
-      broadcast(MPI_COMM_WORLD,dp[i - 1].data(),capacity+1,0); //broadcast the previous line from master
-      int actual_index = 0;
-      int active = 0;
-      auto generator = [capacity, chunk_size,&actual_index,&active]() -> std::optional<NodeTask> {
-          if (actual_index > capacity)
-          {
-              return std::nullopt;
-          }
-          int start = actual_index;
-          int end = std::min(actual_index + chunk_size - 1, capacity);
-          actual_index = end + 1;
-          active++;
-          return NodeTask{start, end};
-      };
-      send_a_task_to_all_workers(comm, generator);
-      while(active>0)
+#figure(
+  sourcecode[
+    ```cpp
+      int n = static_cast<int>(weights.size());
+      std::vector<std::vector<uint32_t>> dp(n + 1, std::vector<uint32_t>(capacity + 1, 0));
+      for (int i = 1; i <= n; ++i)
       {
-          auto result= receive_a_result_from_any_worker(comm);
-          active--;
-          copy_result_to_dp_table(dp[i], result);
+          broadcast(MPI_COMM_WORLD,dp[i - 1].data(),capacity+1,0); //broadcast the previous line from master
+          int actual_index = 0;
+          int active = 0;
+          auto generator = [capacity, chunk_size,&actual_index,&active]() -> std::optional<NodeTask> {
+              if (actual_index > capacity)
+              {
+                  return std::nullopt;
+              }
+              int start = actual_index;
+              int end = std::min(actual_index + chunk_size - 1, capacity);
+              actual_index = end + 1;
+              active++;
+              return NodeTask{start, end};
+          };
+          send_a_task_to_all_workers(comm, generator);
+          while(active>0)
+          {
+              auto result= receive_a_result_from_any_worker(comm);
+              active--;
+              copy_result_to_dp_table(dp[i], result);
+          }
+          terminate_all_workers(comm);
+          comm.barrier();
       }
-      terminate_all_workers(comm);
-      comm.barrier();
-  }
-  ```,
+    ```
+  ],
+  caption: "Master Task",
+  kind: "listing",
 )
 
 terminati i cicli il master può leggere dalla DP il risultato. Si evince subito che l'implementazione MPI è piuttosto semplice e segue uno schema molto simile alla versione Shared Memory, tuttavia presenta lo svantaggio di dover comunicare la linea calcolata a tutti i worker. Svantaggio che si avrebbe comunque anche nel caso della versione più ottimizzata, in cui non esiste la DP perchè non si esegue il backtracking per ricostruire gli oggetti scelti, ma si calcola solo il profitto massimo ottenibile. In questo caso infatti, per calcolare la linea successiva della DP è necessario conoscere la linea precedente, quindi anche in questo caso si dovrebbe comunicare a tutti i worker la linea precedentemente calcolata.
@@ -546,75 +531,84 @@ La versione COPA dell'algoritmo è stata pensata per essere eseguita in shared m
 
 I sottoinsiemi sono generati partendo dalla lista generale, dividendola in due e generando a partire dalle due liste spezzate un insieme di sottoinsiemi di soluzioni. L'algoritmo si articola in due fasi: 1) copia della lista precedente e aggiunta dell'elemento a ogni insieme 2) merging della nuova lista con quella precedente usando l'algoritmo di coranking.
 
-#codelisting(
-  "funzione di Parallel Merging",
-  ```cpp
-  using namespace std::ranges;
-  int total_size = static_cast<int>(A.size() + B.size());
+#figure(
+  sourcecode[
+    ```cpp
+      using namespace std::ranges;
+      int total_size = static_cast<int>(A.size() + B.size());
 
-  #pragma omp parallel for num_threads(num_threads)
-  for (int t = 0; t < num_threads; ++t)
-  {
-      int start = t * total_size / num_threads;
-      int end = (t + 1) * total_size / num_threads;
+      #pragma omp parallel for num_threads(num_threads)
+      for (int t = 0; t < num_threads; ++t)
+      {
+          int start = t * total_size / num_threads;
+          int end = (t + 1) * total_size / num_threads;
 
-      auto [a_start, b_start] = co_rank(A, B, start);
-      auto [a_end, b_end] = co_rank(A, B, end);
-      std::merge(begin(A) + a_start, begin(A) + a_end, begin(B) + b_start, begin(B) + b_end, begin(output) + start);
-  }
-  ```,
+          auto [a_start, b_start] = co_rank(A, B, start);
+          auto [a_end, b_end] = co_rank(A, B, end);
+          std::merge(begin(A) + a_start, begin(A) + a_end, begin(B) + b_start, begin(B) + b_end, begin(output) + start);
+      }
+    ```
+  ],
+  caption: "funzione di Parallel Merging",
+  kind: "listing",
 )
 
-#codelisting(
-  "Funzione di generazione e merging",
-  ```cpp
-  for (int item_idx = 0; auto &&item : r)
-  {
-      std::vector<CopaSubset> shifted{subsets.size()};
-      auto [w, v] = item;
-      for (int i = 0; i < static_cast<int>(shifted.size()); i++)
+#figure(
+  sourcecode[
+    ```cpp
+      for (int item_idx = 0; auto &&item : r)
       {
-          shifted[i] = subsets[i];
-          shifted[i].addItem(item_idx, w, v);
+          std::vector<CopaSubset> shifted{subsets.size()};
+          auto [w, v] = item;
+          for (int i = 0; i < static_cast<int>(shifted.size()); i++)
+          {
+              shifted[i] = subsets[i];
+              shifted[i].addItem(item_idx, w, v);
+          }
+          item_idx++;
+          std::vector<CopaSubset> merged;
+          merged.resize(subsets.size() + shifted.size());
+          parallel_merge(subsets, shifted, merged, numthreads);
+          subsets = std::move(merged);
       }
-      item_idx++;
-      std::vector<CopaSubset> merged;
-      merged.resize(subsets.size() + shifted.size());
-      parallel_merge(subsets, shifted, merged, numthreads);
-      subsets = std::move(merged);
-  }
-  ```,
+    ```
+  ],
+  caption: "Funzione di generazione e merging",
+  kind: "listing",
 )
 
 Per aumentare il più possibile la località dei dati durante questa fase, si copia il dato e gli si aggiunge l'item direttamente nelle istruzioni successive. Questa funzione nello specifico restituisce il metodo di generazione della lista A in ordine crescente, per la lista B è sufficiente usare std::reverse, una possibile ottimizzazione sarebbe quella di usare std::ranges::reverse in modo che il reversing dei dati sia lazy, cioè effettuato solo quando si pesca dal range. Tuttavia visto che le funzioni successive richiederanno l'uso di input range, che richiede che il range in entrata sia contiguo, questa operazione non sarà possibile poichè il reverse range non è contiguo per lo standard c++. A questo punto si può procedere e suddividere la lista di blocchi in sottoinsiemi di blocchi equamente distribuiti tra i processori, avendo cura di calcolare il massimo profitto durante questa operazione.
 
-#codelisting(
-  "Funzione di calcolo del massimo e distribuzione dei blocchi",
-  ```cpp
-  int n = static_cast<int>(std::ranges::size(input));
-  int k = num_threads;
-  int block_size = n / k;
-  int remainder = n % k;
-  #pragma omp parallel for num_threads(num_threads)
-  for (int i = 0; i < k; ++i)
-  {
-      int start = i * block_size + std::min(i, remainder);
-      int end = start + block_size + (i < remainder ? 1 : 0);
-      if (start >= end)
+#figure(
+  sourcecode[
+    ```cpp
+      int n = static_cast<int>(std::ranges::size(input));
+      int k = num_threads;
+      int block_size = n / k;
+      int remainder = n % k;
+      #pragma omp parallel for num_threads(num_threads)
+      for (int i = 0; i < k; ++i)
       {
-          output[i] = {std::span<const CopaSubset>{}, 0};
-          continue;
+          int start = i * block_size + std::min(i, remainder);
+          int end = start + block_size + (i < remainder ? 1 : 0);
+          if (start >= end)
+          {
+              output[i] = {std::span<const CopaSubset>{}, 0};
+              continue;
+          }
+          auto span = std::ranges::subrange(std::ranges::begin(input) + start, std::ranges::begin(input) + end);
+          int max_val = 0;
+          for (const auto &elem : span)
+          {
+              if (elem.totalValue > max_val)
+                  max_val = elem.totalValue;
+          }
+          output[i] = {span, max_val};
       }
-      auto span = std::ranges::subrange(std::ranges::begin(input) + start, std::ranges::begin(input) + end);
-      int max_val = 0;
-      for (const auto &elem : span)
-      {
-          if (elem.totalValue > max_val)
-              max_val = elem.totalValue;
-      }
-      output[i] = {span, max_val};
-  }
-  ```,
+    ```
+  ],
+  caption: "Funzione di calcolo del massimo e distribuzione dei blocchi",
+  kind: "listing",
 )
 
 A questo punto ci si ritrova in output una lista di sottoinsiemi di blocchi, ogni elemento corrisponde al sottoinsieme su cui ci si aspetta che il processo p operi.
@@ -623,191 +617,209 @@ A questo punto ci si ritrova in output una lista di sottoinsiemi di blocchi, ogn
 
 Una volta compiuta l'operazione di distribuzione si può passare a eseguire il pruning delle soluzioni.
 
-#codelisting(
-  "Funzione di pruning di un sottoinsieme di blocchi",
-  ```cpp
-  int k = static_cast<int>(blocksB.size());
-  int best_value = 0;
-  for (int j = i; j < k + i; ++j)
-  {
-      int b_idx = j % k;
-      const auto &blockB = blocksB[b_idx];
-      if (blockB.block.empty())
-          continue;
-      int Z = blockA.block.front().totalWeight + blockB.block.back().totalWeight;
-      int Y = blockA.block.back().totalWeight + blockB.block.front().totalWeight;
+#figure(
+  sourcecode[
+    ```cpp
+      int k = static_cast<int>(blocksB.size());
+      int best_value = 0;
+      for (int j = i; j < k + i; ++j)
+      {
+          int b_idx = j % k;
+          const auto &blockB = blocksB[b_idx];
+          if (blockB.block.empty())
+              continue;
+          int Z = blockA.block.front().totalWeight + blockB.block.back().totalWeight;
+          int Y = blockA.block.back().totalWeight + blockB.block.front().totalWeight;
 
-      // Note: prune is done by not adding the pair to local_results
-      if (Y <= capacity)
-      {
-          // All pairs in this block pair are valid; save max profit and prune
-          if (blockA.maxValue + blockB.maxValue > best_value)
+          // Note: prune is done by not adding the pair to local_results
+          if (Y <= capacity)
           {
-              best_value = blockA.maxValue + blockB.maxValue;
+              // All pairs in this block pair are valid; save max profit and prune
+              if (blockA.maxValue + blockB.maxValue > best_value)
+              {
+                  best_value = blockA.maxValue + blockB.maxValue;
+              }
+              remaining.emplace_back(blockA, blockB);
           }
-          remaining.emplace_back(blockA, blockB);
+          else if (Z <= capacity && Y > capacity)
+          {
+              remaining.emplace_back(blockA, blockB);
+          }
+          else if (Z > capacity)
+          {
+              // No pairs in this block pair are valid; prune
+          }
       }
-      else if (Z <= capacity && Y > capacity)
-      {
-          remaining.emplace_back(blockA, blockB);
-      }
-      else if (Z > capacity)
-      {
-          // No pairs in this block pair are valid; prune
-      }
-  }
-  ```,
+    ```
+  ],
+  caption: "Funzione di pruning di un sottoinsieme di blocchi",
+  kind: "listing",
 )
 
 La suddetta funzione deve essere chiamata in modo parallelo in questo modo. La suddivisione è necessaria poichè questa implementazione della funzione di pruning è stata riutilizzata anche nella versione MPI.
 
-#codelisting(
-  "Chiamata parallela della funzione di pruning",
-  ```cpp
-  std::vector<std::vector<std::pair<CopaBlock, CopaBlock>>> local_results(threads);
-  #pragma omp parallel for num_threads(threads)
-  for (int i = 0; i < threads; ++i)
-  {
-      const auto &blockA = blocksA[i];
-      prune_block_pair(blockA, blocksB, local_results[i], capacity, i);
-  }
-  // Merge local results from all processors
-  for (const auto &local : local_results)
-  {
-      remaining.insert(remaining.end(), local.begin(), local.end());
-  }
-  ```,
+#figure(
+  sourcecode[
+    ```cpp
+      std::vector<std::vector<std::pair<CopaBlock, CopaBlock>>> local_results(threads);
+      #pragma omp parallel for num_threads(threads)
+      for (int i = 0; i < threads; ++i)
+      {
+          const auto &blockA = blocksA[i];
+          prune_block_pair(blockA, blocksB, local_results[i], capacity, i);
+      }
+      // Merge local results from all processors
+      for (const auto &local : local_results)
+      {
+          remaining.insert(remaining.end(), local.begin(), local.end());
+      }
+    ```
+  ],
+  caption: "Chiamata parallela della funzione di pruning",
+  kind: "listing",
 )
 
 A questo punto si può illustrare la funzione di ricerca parallela dei massimi, che viene chiamata sui blocchi rimanenti in questo modo, anche in questo caso la funzione è stata disaccoppiata poichè la parte di calcolo è stata riutilizzata nella versione a memoria distribuita.
 
-#codelisting(
-  "Ricerca parallela dei massimi sui blocchi rimanenti",
-  ```cpp
-  #pragma omp parallel for num_threads(numThreads)
-  for (int i = 0; i < numThreads; ++i)
-  {
-      const auto &[blockA, blockB] = remainingPairs[i];
+#figure(
+  sourcecode[
+    ```cpp
+      #pragma omp parallel for num_threads(numThreads)
+      for (int i = 0; i < numThreads; ++i)
+      {
+          const auto &[blockA, blockB] = remainingPairs[i];
 
-      // Stage 5: Two-pointer search within this block pair
-      BlockPairSearchResult result = block_pair_pointer_search(blockA, blockB, capacity);
-      processBestVal[i] = result.bestVal;
-      processBestAIdx[i] = result.bestAIdx;
-      processBestBIdx[i] = result.bestBIdx;
-  }
-  ```,
+          // Stage 5: Two-pointer search within this block pair
+          BlockPairSearchResult result = block_pair_pointer_search(blockA, blockB, capacity);
+          processBestVal[i] = result.bestVal;
+          processBestAIdx[i] = result.bestAIdx;
+          processBestBIdx[i] = result.bestBIdx;
+      }
+    ```
+  ],
+  caption: "Ricerca parallela dei massimi sui blocchi rimanenti",
+  kind: "listing",
 )
 
 La funzione prende in input le coppie rimanenti in ciascuna lista, che è un vettore di coppie di blocchi, e li esamina in questo modo: prima calcola il suffisso massimo di profitto tra i blocchi della lista B, dopodichè esegue una comparazione con i pesi della lista A.
 
-#codelisting(
-  "Funzione di ricerca del massimo tra i blocchi rimanenti",
-  ```cpp
-  int blocka_size = static_cast<int>(blockA.block.size());
-  int blockb_size = static_cast<int>(blockB.block.size());
-  // Stage 4: Suffix max for this B block
-  std::vector<int> suffixMaxVal(blockb_size);
-  std::vector<int> suffixMaxIdx(blockb_size);
-  block_suffix_max_values(blockB.block, suffixMaxVal, suffixMaxIdx);
+#figure(
+  sourcecode[
+    ```cpp
+      int blocka_size = static_cast<int>(blockA.block.size());
+      int blockb_size = static_cast<int>(blockB.block.size());
+      // Stage 4: Suffix max for this B block
+      std::vector<int> suffixMaxVal(blockb_size);
+      std::vector<int> suffixMaxIdx(blockb_size);
+      block_suffix_max_values(blockB.block, suffixMaxVal, suffixMaxIdx);
 
-  int x = 0, y = 0;
-  int bestVal = 0, bestA = 0, bestB = 0;
-  while (x < blocka_size && y < blockb_size)
-  {
-      if (blockA.block[x].totalWeight + blockB.block[y].totalWeight > capacity)
+      int x = 0, y = 0;
+      int bestVal = 0, bestA = 0, bestB = 0;
+      while (x < blocka_size && y < blockb_size)
       {
-          y++;
-          continue;
+          if (blockA.block[x].totalWeight + blockB.block[y].totalWeight > capacity)
+          {
+              y++;
+              continue;
+          }
+          int candidate = blockA.block[x].totalValue + suffixMaxVal[y];
+          if (candidate > bestVal)
+          {
+              bestVal = candidate;
+              bestA = blockA.block[x].index;
+              bestB = suffixMaxIdx[y];
+          }
+          x++;
       }
-      int candidate = blockA.block[x].totalValue + suffixMaxVal[y];
-      if (candidate > bestVal)
-      {
-          bestVal = candidate;
-          bestA = blockA.block[x].index;
-          bestB = suffixMaxIdx[y];
-      }
-      x++;
-  }
-  return {bestVal, bestA, bestB};
-  ```,
+      return {bestVal, bestA, bestB};
+    ```
+  ],
+  caption: "Funzione di ricerca del massimo tra i blocchi rimanenti",
+  kind: "listing",
 )
 
 La funzione di calcolo dei suffissi è implementata in questo modo
 
-#codelisting(
-  "Funzione di calcolo dei suffix max",
-  ```cpp
-  int e = static_cast<int>(block.size());
-  suffixMaxValues[e - 1] = block[e - 1].totalValue;
-  suffixMaxIndices[e - 1] = block[e - 1].index;
-  for (int j = e - 2; j >= 0; --j)
-  {
-      if (block[j].totalValue > suffixMaxValues[j + 1])
+#figure(
+  sourcecode[
+    ```cpp
+      int e = static_cast<int>(block.size());
+      suffixMaxValues[e - 1] = block[e - 1].totalValue;
+      suffixMaxIndices[e - 1] = block[e - 1].index;
+      for (int j = e - 2; j >= 0; --j)
       {
-          suffixMaxValues[j] = block[j].totalValue;
-          suffixMaxIndices[j] = block[j].index;
+          if (block[j].totalValue > suffixMaxValues[j + 1])
+          {
+              suffixMaxValues[j] = block[j].totalValue;
+              suffixMaxIndices[j] = block[j].index;
+          }
+          else
+          {
+              suffixMaxValues[j] = suffixMaxValues[j + 1];
+              suffixMaxIndices[j] = suffixMaxIndices[j + 1];
+          }
       }
-      else
-      {
-          suffixMaxValues[j] = suffixMaxValues[j + 1];
-          suffixMaxIndices[j] = suffixMaxIndices[j + 1];
-      }
-  }
-  ```,
+    ```
+  ],
+  caption: "Funzione di calcolo dei suffix max",
+  kind: "listing",
 )
 
 === L'algoritmo completo
 
 La funzione completa si articola quindi in questo modo
 
-#codelisting(
-  "Funzione knapsackcopa completa",
-  ```cpp
-  using namespace std::views;
-  auto list = zip(weights, values);
-  int n = static_cast<int>(weights.size());
-  auto Alist = take(list, n / 2);
-  auto Blist = drop(list, n / 2);
-  std::vector<CopaSubset> A, B;
-  generate_copa_subsets(Alist, numThreads);
-  generate_copa_subsets(Blist, numThreads, true);
-  int N = static_cast<int>(B.size());
-  // Stage 2 : Parallel suffix max for B (MaxBj and Lj)
-  std::vector<CopaBlock> blocksA(numThreads);
-  std::vector<CopaBlock> blocksB(numThreads);
-  distribute_block_per_processor(A, blocksA, numThreads);
-  distribute_block_per_processor(B, blocksB, numThreads);
-  // Stage 3: Parallel pruning
-  std::vector<std::pair<CopaBlock, CopaBlock>> remainingPairs;
-  prune(blocksA, blocksB, remainingPairs, capacity, numThreads);
-  // Stages 4+5: For each remaining block pair, compute suffix max and search
-  int k = static_cast<int>(remainingPairs.size());
-  int bestAIdx = 0, bestBIdx = 0, bestValue = 0;
-  std::vector<int> localBestVal(k, 0);
-  std::vector<int> localBestAIdx(k, 0);
-  std::vector<int> localBestBIdx(k, 0);
-  parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k);
-  // Reduce across all remaining pairs
-  #pragma omp parallel for num_threads(numThreads)
-  for (int i = 0; i < k; ++i)
-  {
-      #pragma omp critical
-      if (localBestVal[i] > bestValue)
+#figure(
+  sourcecode[
+    ```cpp
+      using namespace std::views;
+      auto list = zip(weights, values);
+      int n = static_cast<int>(weights.size());
+      auto Alist = take(list, n / 2);
+      auto Blist = drop(list, n / 2);
+      std::vector<CopaSubset> A, B;
+      generate_copa_subsets(Alist, numThreads);
+      generate_copa_subsets(Blist, numThreads, true);
+      int N = static_cast<int>(B.size());
+      // Stage 2 : Parallel suffix max for B (MaxBj and Lj)
+      std::vector<CopaBlock> blocksA(numThreads);
+      std::vector<CopaBlock> blocksB(numThreads);
+      distribute_block_per_processor(A, blocksA, numThreads);
+      distribute_block_per_processor(B, blocksB, numThreads);
+      // Stage 3: Parallel pruning
+      std::vector<std::pair<CopaBlock, CopaBlock>> remainingPairs;
+      prune(blocksA, blocksB, remainingPairs, capacity, numThreads);
+      // Stages 4+5: For each remaining block pair, compute suffix max and search
+      int k = static_cast<int>(remainingPairs.size());
+      int bestAIdx = 0, bestBIdx = 0, bestValue = 0;
+      std::vector<int> localBestVal(k, 0);
+      std::vector<int> localBestAIdx(k, 0);
+      std::vector<int> localBestBIdx(k, 0);
+      parallel_save_max(remainingPairs, localBestVal, localBestAIdx, localBestBIdx, capacity, k);
+      // Reduce across all remaining pairs
+      #pragma omp parallel for num_threads(numThreads)
+      for (int i = 0; i < k; ++i)
       {
-          bestValue = localBestVal[i];
-          bestAIdx = localBestAIdx[i];
-          bestBIdx = localBestBIdx[i];
+          #pragma omp critical
+          if (localBestVal[i] > bestValue)
+          {
+              bestValue = localBestVal[i];
+              bestAIdx = localBestAIdx[i];
+              bestBIdx = localBestBIdx[i];
+          }
       }
-  }
-  // Reconstruct solution
-  KnapsackSolution solution{};
-  solution.totalValue = bestValue;
-  solution.totalWeight = A[bestAIdx].totalWeight + B[bestBIdx].totalWeight;
-  auto items = (A[bestAIdx] << B[bestBIdx]).getItemIndices();
-  solution.items.reserve(items.size());
-  solution.items.insert(solution.items.end(), items.begin(), items.end());
-  return solution;
-  ```,
+      // Reconstruct solution
+      KnapsackSolution solution{};
+      solution.totalValue = bestValue;
+      solution.totalWeight = A[bestAIdx].totalWeight + B[bestBIdx].totalWeight;
+      auto items = (A[bestAIdx] << B[bestBIdx]).getItemIndices();
+      solution.items.reserve(items.size());
+      solution.items.insert(solution.items.end(), items.begin(), items.end());
+      return solution;
+    ```
+  ],
+  caption: "Funzione knapsackcopa completa",
+  kind: "listing",
 )
 
 Questa funzione mette semplicemente insieme tutti i passi dell'algoritmo: 1) si generano i 2 subsets dividendo in 2 la lista di pesi e profitti 2) si distribuiscono i blocchi tra i processori e si cercano i primi massimi profitti tra i blocchi 3) si esegue la potatura dei blocchi 4) si effettua il secondo algoritmo di ricerca dei massimi e si estrae la soluzione finale concatenando gli indici degli oggetti rappresentati come stringa binaria.
@@ -818,57 +830,63 @@ Questo algoritmo è stato concepito principalmente per un utilizzo in shared mem
 
 === Generazione dei subsets
 
-#codelisting(
-  "Funzione di merge parallelo della lista",
-  ```cpp
-  auto proc = compute_corank_procedure(comm, A, B);
-  int rank = comm.rank();
-  int a_start = proc.a_displacements[rank];
-  int a_end = a_start + proc.a_sizes[rank];
-  int b_start = proc.b_displacements[rank];
-  int b_end = b_start + proc.b_sizes[rank];
-  std::vector<CopaSubset> local_result(proc.output_sizes[rank]);
-  std::merge(A.begin() + a_start, A.begin() + a_end, B.begin() + b_start, B.begin() + b_end, local_result.begin());
-  all_gatherv(comm, local_result.data(), proc.output_sizes[rank], output.data(), proc.output_sizes,
-          proc.output_displacements, 0);
-  ```,
+#figure(
+  sourcecode[
+    ```cpp
+      auto proc = compute_corank_procedure(comm, A, B);
+      int rank = comm.rank();
+      int a_start = proc.a_displacements[rank];
+      int a_end = a_start + proc.a_sizes[rank];
+      int b_start = proc.b_displacements[rank];
+      int b_end = b_start + proc.b_sizes[rank];
+      std::vector<CopaSubset> local_result(proc.output_sizes[rank]);
+      std::merge(A.begin() + a_start, A.begin() + a_end, B.begin() + b_start, B.begin() + b_end, local_result.begin());
+      all_gatherv(comm, local_result.data(), proc.output_sizes[rank], output.data(), proc.output_sizes,
+              proc.output_displacements, 0);
+    ```
+  ],
+  caption: "Funzione di merge parallelo della lista",
+  kind: "listing",
 )
 
 La funzione di merging funziona calcolando parallelamente tutti i corank degli elementi, infine applica il merge su pezzi di lista distinti, esegue il gather delle varie liste usando come displacement proprio gli indici calcolati dal corank e infine distribuisce il risultato a tutti i task.
 
-#codelisting(
-  "Funzione di generazione dei subsets",
-  ```cpp
-  std::vector<CopaSubset> subsets{CopaSubset{}};
-  for (int item_idx = 0; const auto &item : items)
-  {
-      decltype(subsets) shifted{subsets.size()};
-      auto [w, v] = item;
-      int local_size = static_cast<int>(shifted.size()) / comm.size();
-      int remainder = static_cast<int>(shifted.size()) % comm.size();
-      auto procedure = compute_scatter_procedure(comm, subsets);
-      std::vector<CopaSubset> local_shifted{static_cast<size_t>(procedure.sizes[comm.rank()]), CopaSubset{}};
-
-      // Distribute subsets to all processes for local shifting
-      scatterv(comm, subsets.data(), procedure.sizes, procedure.displacements, local_shifted.data(),
-                  procedure.sizes[comm.rank()], 0);
-
-      for (int i = 0; i < static_cast<int>(local_shifted.size()); i++)
+#figure(
+  sourcecode[
+    ```cpp
+      std::vector<CopaSubset> subsets{CopaSubset{}};
+      for (int item_idx = 0; const auto &item : items)
       {
-          local_shifted[i].addItem(item_idx, w, v);
+          decltype(subsets) shifted{subsets.size()};
+          auto [w, v] = item;
+          int local_size = static_cast<int>(shifted.size()) / comm.size();
+          int remainder = static_cast<int>(shifted.size()) % comm.size();
+          auto procedure = compute_scatter_procedure(comm, subsets);
+          std::vector<CopaSubset> local_shifted{static_cast<size_t>(procedure.sizes[comm.rank()]), CopaSubset{}};
+
+          // Distribute subsets to all processes for local shifting
+          scatterv(comm, subsets.data(), procedure.sizes, procedure.displacements, local_shifted.data(),
+                      procedure.sizes[comm.rank()], 0);
+
+          for (int i = 0; i < static_cast<int>(local_shifted.size()); i++)
+          {
+              local_shifted[i].addItem(item_idx, w, v);
+          }
+          all_gatherv(comm, local_shifted.data(), procedure.sizes[comm.rank()], shifted.data(), procedure.sizes,
+                  procedure.displacements, 0);
+          item_idx++;
+          std::vector<CopaSubset> newSubsets;
+          newSubsets.resize(subsets.size() + shifted.size());
+          mpi_parallel_merge(comm, subsets, shifted, newSubsets);
+          subsets = std::move(newSubsets);
       }
-      all_gatherv(comm, local_shifted.data(), procedure.sizes[comm.rank()], shifted.data(), procedure.sizes,
-              procedure.displacements, 0);
-      item_idx++;
-      std::vector<CopaSubset> newSubsets;
-      newSubsets.resize(subsets.size() + shifted.size());
-      mpi_parallel_merge(comm, subsets, shifted, newSubsets);
-      subsets = std::move(newSubsets);
-  }
-  if (reverse)
-      std::reverse(subsets);
-  return subsets;
-  ```,
+      if (reverse)
+          std::reverse(subsets);
+      return subsets;
+    ```
+  ],
+  caption: "Funzione di generazione dei subsets",
+  kind: "listing",
 )
 
 La funzione di generazione funziona in modo analogo alla sua controparte shared memory, si crea una lista shifted a partire da quella presente al passo precedente, si esegue lo scattering e ogni task aggiunge internamente al suo pezzo di lista l'oggetto, infine si esegue riunisce la lista e si procede alla funzione di merging parallelo.
@@ -877,29 +895,32 @@ La funzione di generazione funziona in modo analogo alla sua controparte shared 
 
 Anche in questo caso la funzione di distribuzione si comporta in modo analogo alla versione shared memory, ogni processore prende un subrange della lista di blocchi e lo salva cercando anche l'elemento di massimo profitto. La funzione non ritorna la lista ma la usa solo per cercare il massimo.
 
-#codelisting(
-  "Funzione di distribuzione dei blocchi",
-  ```cpp
-  using value_type = std::ranges::range_value_t<decltype(input)>;
-  // calculate the size of the blocks for the thread
-  int n = static_cast<int>(std::ranges::size(input));
-  int k = comm.size();
-  int i = comm.rank();
+#figure(
+  sourcecode[
+    ```cpp
+      using value_type = std::ranges::range_value_t<decltype(input)>;
+      // calculate the size of the blocks for the thread
+      int n = static_cast<int>(std::ranges::size(input));
+      int k = comm.size();
+      int i = comm.rank();
 
-  int block_size = n / k;
-  int remainder = n % k;
+      int block_size = n / k;
+      int remainder = n % k;
 
-  int start = i * block_size + std::min(i, remainder);
-  int end = start + block_size + (i < remainder ? 1 : 0);
-  auto span = std::ranges::subrange(std::ranges::begin(input) + start, std::ranges::begin(input) + end);
-  int max_val = 0;
-  for (const auto &elem : span)
-  {
-      if (elem.totalValue > max_val)
-          max_val = elem.totalValue;
-  }
-  return {start, end, max_val};
-  ```,
+      int start = i * block_size + std::min(i, remainder);
+      int end = start + block_size + (i < remainder ? 1 : 0);
+      auto span = std::ranges::subrange(std::ranges::begin(input) + start, std::ranges::begin(input) + end);
+      int max_val = 0;
+      for (const auto &elem : span)
+      {
+          if (elem.totalValue > max_val)
+              max_val = elem.totalValue;
+      }
+      return {start, end, max_val};
+    ```
+  ],
+  caption: "Funzione di distribuzione dei blocchi",
+  kind: "listing",
 )
 
 Dopodichè i processi eseguono il pruning esattamente come nella versione shared memory.
@@ -908,65 +929,68 @@ Dopodichè i processi eseguono il pruning esattamente come nella versione shared
 
 L'aspetto della funzione di calcolo completa è analogo alla versione shared memory, la lista di pesi e profitti viene divisa a metà in 2 liste A e B. Vengono generati i subset per ognuna delle due liste e viene invertito l'ordine per la seconda. Si distribuiscono i blocchi tra i processori e poi ogni processo effettua il pruning comparando i blocchi ad esso assegnati. Finito questo insieme di operazione ogni processo avrà trovato un suo massimo, a quel punto si effettua una reduce su tutte le soluzioni trovate e si prende quella di massimo profitto.
 
-#codelisting(
-  "Funzione completa COPA MPI",
-  ```cpp
-  int world = comm.size();
-  int n = static_cast<int>(weights.size());
-  std::vector<std::pair<int, int>> Alist, Blist;
-  Alist.reserve(n / 2);
-  Blist.reserve(n / 2);
-  for (int i = 0; i < n / 2; ++i)
-      Alist.emplace_back(weights[i], values[i]);
-  for (int i = n / 2; i < n; ++i)
-      Blist.emplace_back(weights[i], values[i]);
-  auto A = mpi_generate_copa_subsets(comm, Alist);
-  auto B = mpi_generate_copa_subsets(comm, Blist, true);
-  int N = static_cast<int>(B.size());
-  auto i = comm.rank();
-  // Stage 2 : Parallel suffix max for B (MaxBj and Lj)
-  CopaBlock blockA;
-  std::vector<CopaBlock> blocksB(world);
-  std::vector<CopaDistributionIndex> blockBdescriptors(world);
-  auto blockAdesc = mpi_distribute_block_per_process(comm, A);
-  auto blockBdesc = mpi_distribute_block_per_process(comm, B);
-  boost::mpi::all_gather(comm, blockBdesc, blockBdescriptors.data());
-  blockA.block = std::span(A).subspan(blockAdesc.start, blockAdesc.end - blockAdesc.start);
-  blockA.maxValue = blockAdesc.maxValue;
-  for (int i = 0; i < world; ++i)
-  {
-      blocksB[i].block =
-          std::span(B).subspan(blockBdescriptors[i].start, blockBdescriptors[i].end - blockBdescriptors[i].start);
-      blocksB[i].maxValue = blockBdescriptors[i].maxValue;
-  }
-  // Note: we avoid communication during distribution, each node will only communicate the tasks to perform
-  std::vector<std::pair<CopaBlock, CopaBlock>> local_remaining_pairs{};
-  comm.barrier();
-  prune_block_pair(blockA, blocksB, local_remaining_pairs, capacity, i);
-  BlockPairSearchResult solution{};
-  for (const auto &[remBlockA, remBlockB] : local_remaining_pairs)
-  {
-      auto local_solution = block_pair_pointer_search(remBlockA, remBlockB, capacity);
-      if (local_solution.bestVal > solution.bestVal)
+#figure(
+  sourcecode[
+    ```cpp
+      int world = comm.size();
+      int n = static_cast<int>(weights.size());
+      std::vector<std::pair<int, int>> Alist, Blist;
+      Alist.reserve(n / 2);
+      Blist.reserve(n / 2);
+      for (int i = 0; i < n / 2; ++i)
+          Alist.emplace_back(weights[i], values[i]);
+      for (int i = n / 2; i < n; ++i)
+          Blist.emplace_back(weights[i], values[i]);
+      auto A = mpi_generate_copa_subsets(comm, Alist);
+      auto B = mpi_generate_copa_subsets(comm, Blist, true);
+      int N = static_cast<int>(B.size());
+      auto i = comm.rank();
+      // Stage 2 : Parallel suffix max for B (MaxBj and Lj)
+      CopaBlock blockA;
+      std::vector<CopaBlock> blocksB(world);
+      std::vector<CopaDistributionIndex> blockBdescriptors(world);
+      auto blockAdesc = mpi_distribute_block_per_process(comm, A);
+      auto blockBdesc = mpi_distribute_block_per_process(comm, B);
+      boost::mpi::all_gather(comm, blockBdesc, blockBdescriptors.data());
+      blockA.block = std::span(A).subspan(blockAdesc.start, blockAdesc.end - blockAdesc.start);
+      blockA.maxValue = blockAdesc.maxValue;
+      for (int i = 0; i < world; ++i)
       {
-          solution = local_solution;
+          blocksB[i].block =
+              std::span(B).subspan(blockBdescriptors[i].start, blockBdescriptors[i].end - blockBdescriptors[i].start);
+          blocksB[i].maxValue = blockBdescriptors[i].maxValue;
       }
-  }
-  BlockPairSearchResult best{};
-  reduce(comm, solution,best,boost::mpi::maximum<BlockPairSearchResult>(),0);
-  if (comm.rank() == 0)
-  {
-      // Reconstruct solution
-      KnapsackSolution solution{};
-      solution.totalValue = best.bestVal;
-      solution.totalWeight = A[best.bestAIdx].totalWeight + B[best.bestBIdx].totalWeight;
-      //auto items = (A[best.bestAIdx] << B[best.bestBIdx]).getItemIndices();
-      solution.items.reserve(items.size());
-      solution.items.insert(solution.items.end(), items.begin(), items.end());
-      return solution;
-  }
-  return {};
-  ```,
+      // Note: we avoid communication during distribution, each node will only communicate the tasks to perform
+      std::vector<std::pair<CopaBlock, CopaBlock>> local_remaining_pairs{};
+      comm.barrier();
+      prune_block_pair(blockA, blocksB, local_remaining_pairs, capacity, i);
+      BlockPairSearchResult solution{};
+      for (const auto &[remBlockA, remBlockB] : local_remaining_pairs)
+      {
+          auto local_solution = block_pair_pointer_search(remBlockA, remBlockB, capacity);
+          if (local_solution.bestVal > solution.bestVal)
+          {
+              solution = local_solution;
+          }
+      }
+      BlockPairSearchResult best{};
+      reduce(comm, solution,best,boost::mpi::maximum<BlockPairSearchResult>(),0);
+      if (comm.rank() == 0)
+      {
+          // Reconstruct solution
+          KnapsackSolution solution{};
+          solution.totalValue = best.bestVal;
+          solution.totalWeight = A[best.bestAIdx].totalWeight + B[best.bestBIdx].totalWeight;
+          //auto items = (A[best.bestAIdx] << B[best.bestBIdx]).getItemIndices();
+          solution.items.reserve(items.size());
+          solution.items.insert(solution.items.end(), items.begin(), items.end());
+          return solution;
+      }
+      return {};
+    ```
+  ],
+  caption: "Funzione completa COPA MPI",
+  kind: "listing",
 )
 
 === Considerazioni finali sull'implementazione
