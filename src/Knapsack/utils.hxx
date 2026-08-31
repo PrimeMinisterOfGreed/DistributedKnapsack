@@ -111,63 +111,95 @@ void parallel_merge(const Range &A, const Range &B, OutputRange &output, int num
 std::vector<CopaSubset> generate_copa_subsets(std::ranges::input_range auto &&r, int numthreads = 1,
 											  bool reverseorder = false)
 {
-	constexpr int MIN_PARALLEL_SIZE = 1024;
-	std::vector<CopaSubset> subsets{CopaSubset{}};
-	for (int item_idx = 0; auto &&item : r)
+	// Materialize the (weight, value) items so we can preallocate buffers sized
+	// to the final powerset (2^num_items) before generation begins.
+	std::vector<std::pair<int, int>> items;
+	for (auto &&item : r)
 	{
-		std::vector<CopaSubset> shifted{subsets.size()};
 		auto [w, v] = item;
+		items.emplace_back(w, v);
+	}
 
+	const std::size_t num_items = items.size();
+	if (num_items == 0)
+		return {CopaSubset{}};
+
+	constexpr std::size_t MIN_PARALLEL_SIZE = 1024;
+	const std::size_t total = std::size_t{1} << num_items;
+
+	// Ping-pong buffers sized to the final result plus a scratch buffer reused
+	// for the "shifted" list, eliminating per-item allocations.
+	std::vector<CopaSubset> buf0(total);
+	std::vector<CopaSubset> buf1(total);
+	std::vector<CopaSubset> scratch(total / 2);
+	std::vector<CopaSubset> *cur = &buf0;
+	std::vector<CopaSubset> *nxt = &buf1;
+	(*cur)[0] = CopaSubset{};
+	std::size_t size = 1;
+
+	// Per-item step (two passes): build the "take" list shifted[k] = cur[k]+delta,
+	// then merge cur with shifted. Adding the same constant (w,v) to every subset
+	// preserves sorted order, so both lists remain sorted by totalWeight.
+	for (std::size_t item_idx = 0; item_idx < num_items; ++item_idx)
+	{
+		const int w = items[item_idx].first;
+		const int v = items[item_idx].second;
+
+		// Pass 1: parallel add -> shifted.
 		START_BLOCK("GenerateCopaSubset::AddItem");
 		{
-			if (shifted.size() >= MIN_PARALLEL_SIZE && numthreads > 1)
+			std::span<CopaSubset> shifted(scratch.data(), size);
+			if (size >= MIN_PARALLEL_SIZE && numthreads > 1)
 			{
 #pragma omp parallel for num_threads(numthreads)
-				for (int i = 0; i < static_cast<int>(shifted.size()); i++)
+				for (int i = 0; i < static_cast<int>(size); ++i)
 				{
-					shifted[i] = subsets[i];
-					shifted[i].addItem(item_idx, w, v);
+					shifted[static_cast<std::size_t>(i)] = (*cur)[static_cast<std::size_t>(i)];
+					shifted[static_cast<std::size_t>(i)].addItem(static_cast<int>(item_idx), w, v);
 				}
 			}
 			else
 			{
-				for (int i = 0; i < static_cast<int>(shifted.size()); i++)
+				for (std::size_t i = 0; i < size; ++i)
 				{
-					shifted[i] = subsets[i];
-					shifted[i].addItem(item_idx, w, v);
+					shifted[i] = (*cur)[i];
+					shifted[i].addItem(static_cast<int>(item_idx), w, v);
 				}
 			}
 		}
 		END_BLOCK("GenerateCopaSubset::AddItem");
 
-		item_idx++;
-		std::vector<CopaSubset> merged;
-		merged.resize(subsets.size() + shifted.size());
+		// Pass 2: parallel merge -> nxt (coarse co-rank slices, one per thread).
 		START_BLOCK("GenerateCopaSubset::Merge");
 		{
-			if (merged.size() >= MIN_PARALLEL_SIZE && numthreads > 1)
+			auto cur_span = std::span<CopaSubset>(cur->data(), size);
+			auto shifted_span = std::span<CopaSubset>(scratch.data(), size);
+			auto out_span = std::span<CopaSubset>(nxt->data(), 2 * size);
+			if (2 * size >= MIN_PARALLEL_SIZE && numthreads > 1)
 			{
-				parallel_merge(subsets, shifted, merged, numthreads);
+				parallel_merge(cur_span, shifted_span, out_span, numthreads);
 			}
 			else
 			{
-				std::merge(subsets.begin(), subsets.end(), shifted.begin(), shifted.end(), merged.begin());
+				std::merge(cur_span.begin(), cur_span.end(), shifted_span.begin(), shifted_span.end(),
+						   out_span.begin());
 			}
 		}
 		END_BLOCK("GenerateCopaSubset::Merge");
 
-		subsets = std::move(merged);
+		std::swap(cur, nxt);
+		size *= 2;
 	}
 
 	if (reverseorder)
 	{
-		std::reverse(subsets.begin(), subsets.end());
+		std::reverse(cur->begin(), cur->end());
 	}
-	for (int i = 0; i < static_cast<int>(subsets.size()); i++)
+	for (std::size_t i = 0; i < size; ++i)
 	{
-		subsets[i].index = i;
+		(*cur)[i].index = static_cast<int>(i);
 	}
-	return subsets;
+	return std::move(*cur);
 }
 
 #pragma endregion
