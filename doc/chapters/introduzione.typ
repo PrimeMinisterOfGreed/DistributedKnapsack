@@ -1,11 +1,8 @@
 #import "../functions/preamble.typ": *
 #import "@preview/algorithmic:1.0.7"
 #import algorithmic: Line, algorithm-figure, style-algorithm
-#import "@preview/codelst:2.0.2": sourcecode
 
 
-
-= Introduzione
 
 L'algoritmo dello zaino è un noto problema di ottimizzazione. L'idea è che si ha a disposizione uno zaino
 e diversi elementi ad ognuno dei quali è assegnato un peso e un profitto. L'obiettivo è di massimizzare il profitto mantenendo il peso

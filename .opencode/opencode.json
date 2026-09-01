@@ -3,32 +3,6 @@
   "plugin": [
     "opencode-parser"
   ],
-  "provider": {
-    "cefprovider": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "Cluster",
-      "options": {
-        "baseURL": "http://10.0.15.40:5000/qwen/v1"
-      },
-      "models": {
-        "Qwen3.5": {
-          "name": "Qwen3.5",
-          "reasoning": true,
-          "cost": {
-            "input": 0.40,
-            "output": 0.80
-          },
-          "limit": {
-            "context": 128000,
-            "output": 32000
-          },
-          "options": {
-            "max_tokens": 32000,
-          }
-        }
-      }
-    }
-  },
   "lsp": {
    
   }
