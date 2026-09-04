@@ -55,7 +55,7 @@
                 {
                   For($"ogni colonna" c$, {
                     Assign[$"wp"$][$q dot "cap_block" + c$]
-                    Assign[$"block"(0, c)$][$"tile"(b - 1, "wp"/ "cap_block")."ultima_riga"("wp" mod "cap_block")$]
+                    Assign[$"block"(0, c)$][$"tile"(b - 1, "wp"/"cap_block")."block"("rows_local", "wp" mod "cap_block")$]
                   })
                 },
               )
@@ -67,16 +67,16 @@
                     $"w"_i <= "wp"$,
                     {
                       Assign[$"src"$][$"wp" - "w"_i$]
-                      If(
+                      IfElseChain(
                         $"src" >= "lo"$,
                         {
-                          Assign[$"cand"$][$"block"(a, "src" - "lo") + v_i$]
+                          Assign[$"candidate"$][$"block"(a, "src" - "lo") + v_i$]
                         },
                         {
-                          Assign[$"cand"$][$"tile"(b, "src"/"cap_block")."riga_a"[dots] + v_i$]
+                          Assign[$"candidate"$][$"tile"(b, "src"/"cap_block")."block"(a, "src" mod "cap_block") + v_i$]
                         },
                       )
-                      Assign[$"v"$][$"max"("v", "cand")$]
+                      Assign[$"v"$][$"max"("v", "candidate")$]
                     },
                   )
                   Assign[$"block"(a + 1, c)$][$v$]
