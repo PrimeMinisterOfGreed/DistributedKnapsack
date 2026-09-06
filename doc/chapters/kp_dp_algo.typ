@@ -4,7 +4,7 @@
 #import "@preview/codelst:2.0.2": sourcecode
 
 #show: style-algorithm
-#algorithm-figure(
+#let dp_algo_dag_sequential = algorithm-figure(
   "Tiled Knapsack DP",
   inset: 0.42em,
   {
@@ -105,5 +105,5 @@
     )
   },
   supplement: none,
-) <alg:tiled_dp>
+);
 
