@@ -1,6 +1,7 @@
 #include "knapsack.hpp"
 #include "knapsackdpdag_impl.hpp"
 #include <algorithm>
+#include <cstdio>
 #include <time.hpp>
 
 Graph build_graph(const std::vector<int> &weights, int capacity, int item_block, int cap_block)
@@ -38,7 +39,6 @@ Graph build_graph(const std::vector<int> &weights, int capacity, int item_block,
 			// Straight-above tile in the previous item-block.
 			if (b >= 1)
 				boost::add_edge(static_cast<std::size_t>(b - 1) * nq + q, dst, g);
-
 			for (int i = i_start; i < i_end; ++i)
 			{
 				const int wi = weights[i];
@@ -119,8 +119,9 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 
 	for (int L = 0; L <= max_level; ++L)
 	{
+		START_BLOCK("KnapsackDPDAG::LevelCompute");
 		const std::vector<int> &tiles = by_level[static_cast<std::size_t>(L)];
-#pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for
 		for (std::size_t t = 0; t < tiles.size(); ++t)
 		{
 			const int idx = tiles[t];
@@ -150,6 +151,8 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 			}
 
 			// Interior rows: classic skip/take recurrence.
+			//
+#pragma omp parallel for
 			for (int a = 0; a < rows_local; ++a)
 			{
 				const int i = i_start + a;
@@ -182,6 +185,8 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 				}
 			}
 		}
+
+		END_BLOCK("KnapsackDPDAG::LevelCompute");
 	}
 
 	const NodeData &last = g[static_cast<std::size_t>(nb - 1) * nq + (nq - 1)];

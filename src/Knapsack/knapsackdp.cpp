@@ -1,4 +1,5 @@
 #include "knapsack.hpp"
+#include "time.hpp"
 
 KnapsackSolution knapsackdp(const std::vector<int> &weights, const std::vector<int> &values, int capacity)
 {
@@ -8,6 +9,7 @@ KnapsackSolution knapsackdp(const std::vector<int> &weights, const std::vector<i
 	// Build the dp table
 	for (int i = 1; i <= n; ++i)
 	{
+		START_BLOCK("KnapsackDP::Compute");
 #pragma omp parallel for
 		for (int w = 0; w <= capacity; ++w)
 		{
@@ -20,6 +22,7 @@ KnapsackSolution knapsackdp(const std::vector<int> &weights, const std::vector<i
 				dp[i][w] = dp[i - 1][w];
 			}
 		}
+		END_BLOCK("KnapsackDP::Compute");
 	}
 
 	// Backtrack to find the items included in the knapsack
