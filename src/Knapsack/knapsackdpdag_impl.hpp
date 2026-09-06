@@ -48,6 +48,19 @@ using _Graph = boost::adjacency_list<vecS, vecS, bidirectionalS, property<vertex
 
 using Graph = _detail::_Graph;
 
+/** @brief Aggregate statistics about the last solved tile-dependency DAG. */
+struct DAGStats
+{
+	int tiles;	    // number of tiles (vertices)
+	int edges;	    // number of dependency edges
+	int levels;	    // number of longest-path levels (max_level + 1)
+	int maxFrontier; // largest level wavefront (size of the largest by_level bucket)
+	DAGStats()
+		: tiles(0), edges(0), levels(0), maxFrontier(0)
+	{
+	}
+};
+
 /**
  * @brief Build the tile dependency DAG over the (item_block x cap_block) grid.
  *
@@ -91,6 +104,34 @@ void compute_levels(Graph &g);
  */
 int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> &values, int capacity, int item_block,
 			  int cap_block);
+
+/**
+ * @brief Fill every tile's DP block with a counter-based topological scheduler.
+ *
+ * A shared ready-queue of in-degree-zero tiles feeds a team of OpenMP workers.
+ * Each worker claims a ready tile, computes it with compute_tile, atomically
+ * decrements successors' in-degrees (pushing them when they reach zero), and
+ * finally decrements the global remaining-counter. Produces bit-identical
+ * results to solve_dag.
+ *
+ * @param g the DAG built by build_graph (block buffers are written here)
+ * @param weights item weights
+ * @param values  item values
+ * @param capacity knapsack capacity
+ * @param item_block items per tile row
+ * @param cap_block  capacities per tile column
+ * @return the optimal total value
+ */
+int solve_dag_topo(Graph &g, const std::vector<int> &weights, const std::vector<int> &values, int capacity,
+				   int item_block, int cap_block);
+
+/**
+ * @brief Return stats about the most recently solved DAG (tiles/edges/levels/frontier).
+ *
+ * Populated by knapsackdpdag() once per top-level call; safe to call from the
+ * single-threaded CLI benchmark.
+ */
+DAGStats get_dag_stats();
 
 /**
  * @brief Recover the indices of the items included in the optimal solution.

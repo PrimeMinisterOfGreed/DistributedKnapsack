@@ -1,8 +1,35 @@
 #include "knapsack.hpp"
 #include "knapsackdpdag_impl.hpp"
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
+#include <cstdlib>
+#include <thread>
 #include <time.hpp>
+
+// File-scope stats for the most recent DAG solve (single-threaded CLI use).
+namespace
+{
+DAGStats g_last_dag_stats{};
+
+// A/B switch: use the topological scheduler by default; override with the
+// KNAPSACK_DAG_TOPO environment variable ("0" selects the levelized solver).
+bool use_topo_scheduler()
+{
+	static const bool topo = []() {
+		const char *env = std::getenv("KNAPSACK_DAG_TOPO");
+		if (env == nullptr)
+			return true;
+		return std::strcmp(env, "0") != 0;
+	}();
+	return topo;
+}
+} // namespace
+
+DAGStats get_dag_stats()
+{
+	return g_last_dag_stats;
+}
 
 Graph build_graph(const std::vector<int> &weights, int capacity, int item_block, int cap_block)
 {
@@ -120,6 +147,80 @@ void compute_levels(Graph &g)
 	}
 }
 
+/**
+ * @brief Compute one tile's DP block in place.
+ *
+ * Reads the tile-above and left-neighbor tiles exactly as the DAG edges
+ * describe and fills `g[idx].block`. Invoked by BOTH the levelized solver and
+ * the topological scheduler with identical logic so the results match
+ * bit-for-bit.
+ */
+void compute_tile(Graph &g, int idx, const std::vector<int> &weights, const std::vector<int> &values, int item_block,
+				  int cap_block)
+{
+	// nb item-blocks x nq capacity-blocks fills the whole vertex set exactly,
+	// so nq = num_vertices / nb (nb from the item count and item_block).
+	const int nb = (static_cast<int>(weights.size()) + item_block - 1) / item_block;
+	const int nq = (nb == 0) ? 0 : static_cast<int>(boost::num_vertices(g)) / nb;
+	const int b = idx / nq;
+	const int q = idx % nq;
+	const int i_start = b * item_block;
+	NodeData &nd = g[static_cast<std::size_t>(idx)];
+	const int rows = nd.rows;
+	const int width = nd.width;
+	const int rows_local = rows - 1;
+
+	// Boundary row 0: inherited from the tile above (or all zeros if b==0).
+	for (int c = 0; c < width; ++c)
+	{
+		if (b == 0)
+		{
+			nd.block(0, c) = 0;
+		}
+		else
+		{
+			const int wp = nd.lo + c;
+			const int q_prev = wp / cap_block;
+			const int c_prev = wp - q_prev * cap_block;
+			const NodeData &src = g[static_cast<std::size_t>(b - 1) * nq + q_prev];
+			nd.block(0, c) = src.block(src.rows - 1, c_prev);
+		}
+	}
+
+	// Interior rows: classic skip/take recurrence.
+	for (int a = 0; a < rows_local; ++a)
+	{
+		const int i = i_start + a;
+		const int wi = weights[i];
+		const int pi = values[i];
+		const int lo = nd.lo;
+		for (int c = 0; c < width; ++c)
+		{
+			const int wp = lo + c;
+			// "Skip item": carry previous best value.
+			int v = nd.block(a, c);
+			if (wi <= wp)
+			{
+				const int src = wp - wi;
+				if (src >= lo)
+				{
+					// Source capacity is inside this same tile.
+					v = std::max(v, nd.block(a, src - lo) + pi);
+				}
+				else
+				{
+					// Source capacity lies in a tile to the left (same row a).
+					const int q_prev = src / cap_block;
+					const int c_prev = src - q_prev * cap_block;
+					const NodeData &left = g[static_cast<std::size_t>(b) * nq + q_prev];
+					v = std::max(v, left.block(a, c_prev) + pi);
+				}
+			}
+			nd.block(a + 1, c) = v;
+		}
+	}
+}
+
 int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> &values, int capacity, int item_block,
 			  int cap_block)
 {
@@ -132,7 +233,8 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 
 	// Assign each tile its longest-path level.
 	// Tiles with the same level have no dependency path between them
-	// and can therefore be evaluated in parallel.	compute_levels(g);
+	// and can therefore be evaluated in parallel.
+	compute_levels(g);
 
 	int max_level = 0;
 	for (int b = 0; b < nb; ++b)
@@ -154,65 +256,7 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 #pragma omp parallel for
 		for (std::size_t t = 0; t < tiles.size(); ++t)
 		{
-			const int idx = tiles[t];
-			const int b = idx / nq;
-			const int q = idx % nq;
-			const int i_start = b * item_block;
-			NodeData &nd = g[static_cast<std::size_t>(idx)];
-			const int rows = nd.rows;
-			const int width = nd.width;
-			const int rows_local = rows - 1;
-
-			// Boundary row 0: inherited from the tile above (or all zeros if b==0).
-			for (int c = 0; c < width; ++c)
-			{
-				if (b == 0)
-				{
-					nd.block(0, c) = 0;
-				}
-				else
-				{
-					const int wp = nd.lo + c;
-					const int q_prev = wp / cap_block;
-					const int c_prev = wp - q_prev * cap_block;
-					const NodeData &src = g[static_cast<std::size_t>(b - 1) * nq + q_prev];
-					nd.block(0, c) = src.block(src.rows - 1, c_prev);
-				}
-			}
-
-			// Interior rows: classic skip/take recurrence.
-			//
-			for (int a = 0; a < rows_local; ++a)
-			{
-				const int i = i_start + a;
-				const int wi = weights[i];
-				const int pi = values[i];
-				const int lo = nd.lo;
-				for (int c = 0; c < width; ++c)
-				{
-					const int wp = lo + c;
-					// "Skip item": carry previous best value.
-					int v = nd.block(a, c);
-					if (wi <= wp)
-					{
-						const int src = wp - wi;
-						if (src >= lo)
-						{
-							// Source capacity is inside this same tile.
-							v = std::max(v, nd.block(a, src - lo) + pi);
-						}
-						else
-						{
-							// Source capacity lies in a tile to the left (same row a).
-							const int q_prev = src / cap_block;
-							const int c_prev = src - q_prev * cap_block;
-							const NodeData &left = g[static_cast<std::size_t>(b) * nq + q_prev];
-							v = std::max(v, left.block(a, c_prev) + pi);
-						}
-					}
-					nd.block(a + 1, c) = v;
-				}
-			}
+			compute_tile(g, tiles[t], weights, values, item_block, cap_block);
 		}
 
 		END_BLOCK("KnapsackDPDAG::LevelCompute");
@@ -257,18 +301,128 @@ std::vector<int> reconstruct_items(const Graph &g, const std::vector<int> &weigh
 	return items;
 }
 
+int solve_dag_topo(Graph &g, const std::vector<int> &weights, const std::vector<int> &values, int capacity,
+				   int item_block, int cap_block)
+{
+	const int n = static_cast<int>(weights.size());
+	const int nb = (n + item_block - 1) / item_block;
+	const int nq = (capacity + 1 + cap_block - 1) / cap_block;
+	const std::size_t V = boost::num_vertices(g);
+
+	if (nb == 0 || nq == 0 || V == 0)
+		return 0;
+
+	// 1. Per-vertex in-degrees (edges are already deduplicated by build_graph).
+	std::vector<std::atomic<int>> indeg(V);
+	for (std::size_t v = 0; v < V; ++v)
+		indeg[v].store(static_cast<int>(boost::in_degree(v, g)));
+
+	// 2. Number of remaining tiles that must still be computed.
+	std::atomic<int> remaining{static_cast<int>(V)};
+
+	// 3. Shared ready stack: a fixed-size slot array indexed by an atomic
+	//    head (next slot to claim) plus two allocation counters:
+	//      * tail   - number of slots reserved by producers (handed out)
+	//      * filled - number of slots whose value has been written & published
+	//    A producer reserves a slot (tail.fetch_add), writes ready[slot], then
+	//    publishes it with a release store to `filled`. A consumer that observes
+	//    head < filled is guaranteed (by release/acquire) to see ready[head].
+	std::vector<int> ready(V);
+	std::atomic<std::size_t> head{0};
+	std::atomic<std::size_t> tail{0};
+	std::atomic<std::size_t> filled{0};
+	auto push = [&](int v) {
+		const std::size_t slot = tail.fetch_add(1, std::memory_order_relaxed);
+		ready[slot] = v;
+		filled.store(slot + 1, std::memory_order_release);
+	};
+
+	// Seed with all in-degree-zero vertices, in row-major (vertex) order.
+	for (std::size_t v = 0; v < V; ++v)
+		if (indeg[v].load(std::memory_order_relaxed) == 0)
+			push(static_cast<int>(v));
+
+#pragma omp parallel
+	{
+		while (true)
+		{
+			if (remaining.load(std::memory_order_acquire) == 0)
+				break; // every tile computed -> queue is drained and safe to stop
+
+			const std::size_t h = head.load(std::memory_order_acquire);
+			const std::size_t f = filled.load(std::memory_order_acquire);
+			if (h < f)
+			{
+				// Try to claim slot h.
+				std::size_t expected = h;
+				if (!head.compare_exchange_strong(expected, h + 1, std::memory_order_acq_rel))
+					continue; // lost the race; retry the loop
+
+				const int idx = ready[h]; // slot h is published (filled > h => write is visible)
+				compute_tile(g, idx, weights, values, item_block, cap_block);
+
+				// 5. Decrement each successor's in-degree; push the last one.
+				for (auto e : boost::make_iterator_range(boost::out_edges(idx, g)))
+				{
+					const int u = static_cast<int>(boost::target(e, g));
+					if (indeg[u].fetch_sub(1, std::memory_order_acq_rel) == 1)
+						push(u);
+				}
+
+				// 6. This tile is fully done.
+				remaining.fetch_sub(1, std::memory_order_acq_rel);
+			}
+			else
+			{
+				// Queue temporarily empty but work still outstanding: bounded spin.
+				for (int s = 0; s < 64; ++s)
+					std::this_thread::yield();
+			}
+		}
+	}
+
+	// Bottom-right tile holds dp[n][capacity].
+	const NodeData &last = g[static_cast<std::size_t>(nb - 1) * nq + (nq - 1)];
+	const int c_last = capacity - last.lo;
+	return last.block(last.rows - 1, c_last);
+}
+
 KnapsackSolution knapsackdpdag(const std::vector<int> &weights, const std::vector<int> &values, int capacity,
 							   int item_block, int cap_block)
 {
+	const int n = static_cast<int>(weights.size());
 	if (cap_block == 0)
 		cap_block = std::max(1, (capacity + 1) / 10);
+	const int nb = (n + item_block - 1) / item_block;
+	const int nq = (capacity + 1 + cap_block - 1) / cap_block;
 
 	START_BLOCK("GraphBuild");
 	Graph g = build_graph(weights, capacity, item_block, cap_block);
 	END_BLOCK("GraphBuild");
 	START_BLOCK("Dag Solve");
-	const int bestValue = solve_dag(g, weights, values, capacity, item_block, cap_block);
+	const int bestValue = use_topo_scheduler() ? solve_dag_topo(g, weights, values, capacity, item_block, cap_block)
+											   : solve_dag(g, weights, values, capacity, item_block, cap_block);
 	END_BLOCK("Dag Solve");
+
+	// DAG statistics: compute levels serially (outside any parallel region)
+	// and record tiles/edges/levels/maxFrontier for the Python report.
+	compute_levels(g);
+	int max_level = 0;
+	for (int b = 0; b < nb; ++b)
+		for (int q = 0; q < nq; ++q)
+			max_level = std::max(max_level, g[static_cast<std::size_t>(b) * nq + q].level);
+	std::vector<int> level_freq(static_cast<std::size_t>(max_level) + 1, 0);
+	for (int b = 0; b < nb; ++b)
+		for (int q = 0; q < nq; ++q)
+			++level_freq[static_cast<std::size_t>(g[static_cast<std::size_t>(b) * nq + q].level)];
+	int max_frontier = 0;
+	for (std::size_t L = 0; L < level_freq.size(); ++L)
+		max_frontier = std::max(max_frontier, level_freq[L]);
+	g_last_dag_stats.tiles = nb * nq;
+	g_last_dag_stats.edges = static_cast<int>(boost::num_edges(g));
+	g_last_dag_stats.levels = max_level + 1;
+	g_last_dag_stats.maxFrontier = max_frontier;
+
 	const std::vector<int> items = reconstruct_items(g, weights, values, capacity, item_block, cap_block);
 
 	int totalWeight = 0;

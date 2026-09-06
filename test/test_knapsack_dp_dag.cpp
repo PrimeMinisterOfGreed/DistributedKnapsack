@@ -151,3 +151,30 @@ TEST(KnapsackDPDAG, NodeDataEmbedsCapacityRanges)
 		}
 	}
 }
+
+TEST(KnapsackDPDAG, TopoSolverMatchesLevelized)
+{
+	const std::vector<int> weights{1, 2, 3, 4};
+	const std::vector<int> values{1, 6, 10, 16};
+	constexpr int capacity = 7;
+
+	const auto classic = knapsackdp(weights, values, capacity);
+
+	for (int item_block : {1, 2, 4, 10})
+	{
+		for (int cap_block : {1, 3, 7})
+		{
+			auto g1 = build_graph(weights, capacity, item_block, cap_block);
+			const int levelized = solve_dag(g1, weights, values, capacity, item_block, cap_block);
+
+			auto g2 = build_graph(weights, capacity, item_block, cap_block);
+			const int topo_values = solve_dag_topo(g2, weights, values, capacity, item_block, cap_block);
+
+			EXPECT_EQ(topo_values, levelized) << "item_block=" << item_block << " cap_block=" << cap_block;
+			EXPECT_EQ(topo_values, classic.totalValue) << "item_block=" << item_block << " cap_block=" << cap_block;
+
+			const auto sol = knapsackdpdag(weights, values, capacity, item_block, cap_block);
+			EXPECT_EQ(sol.totalValue, topo_values) << "item_block=" << item_block << " cap_block=" << cap_block;
+		}
+	}
+}

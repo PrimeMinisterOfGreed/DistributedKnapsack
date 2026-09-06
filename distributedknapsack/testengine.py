@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Optional
 from pathlib import Path
 from libdistributed_knapsack import (KnapsackArguments, KnapsackSolution, knapsackdp, knapsackcopa,
-                                     knapsackcopasequential, knapsackdpdag, get_all_sections)
+                                     knapsackcopasequential, knapsackdpdag, get_all_sections, get_dag_stats)
 
 
 class BenchmarkTest(ABC):
@@ -112,6 +112,11 @@ class TestRegister:
                 for name, sec in sorted(sections.items()):
                     print(f"    {name}: count={sec.count} mean={sec.mean:.4f}ms "
                           f"min={sec.min:.4f}ms max={sec.max:.4f}ms")
+
+            stats = get_dag_stats()
+            if stats:
+                print(f"    DAG stats: tiles={stats.tiles} edges={stats.edges} "
+                      f"levels={stats.levels} maxFrontier={stats.maxFrontier}")
 
             if self._save_file:
                 self._append_result(test_name, test, duration, result)

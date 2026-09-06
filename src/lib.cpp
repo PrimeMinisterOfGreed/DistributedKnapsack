@@ -1,4 +1,5 @@
 #include "Knapsack/knapsack.hpp"
+#include "Knapsack/knapsackdpdag_impl.hpp"
 #include "time.hpp"
 #include <iostream>
 #include <pybind11/pybind11.h>
@@ -92,4 +93,11 @@ PYBIND11_MODULE(libdistributed_knapsack, m)
 		"get_section", [](const std::string &name) { return TimeSectionRegister::instance().get_section(name); },
 		py::arg("name"));
 	m.def("get_all_sections", []() { return TimeSectionRegister::instance().get_all_sections(); });
+	py::class_<DAGStats>(m, "DAGStats")
+		.def(py::init<>())
+		.def_readonly("tiles", &DAGStats::tiles)
+		.def_readonly("edges", &DAGStats::edges)
+		.def_readonly("levels", &DAGStats::levels)
+		.def_readonly("maxFrontier", &DAGStats::maxFrontier);
+	m.def("get_dag_stats", &get_dag_stats);
 }
