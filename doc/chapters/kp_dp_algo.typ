@@ -15,8 +15,8 @@
       ($n$, $C$, $w$, $v$, $"item_block"$, $"cap_block"$),
       {
         Comment[Inizializzazione]
-        Assign[$"nb"$][$floor(((n+1) - 1) / "item_block")$]
-        Assign[$"nq"$][$floor(((C+1) - 1) / "cap_block")$]
+        Assign[$"nb"$][$floor((n+"item_block"- 1)/ "item_block")$]
+        Assign[$"nq"$][$floor((C+ "cap_block")/"cap_block")$]
 
         Comment[Costruzione del DAG, $"vertex"(b, q) = b dot "nq" + q$]
         For($b <- 1 space "to" space "nb"$, {

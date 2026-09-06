@@ -13,7 +13,7 @@ L'implementazione del knapsack in programmazione dinamica sequenziale è decisam
     std::vector<std::vector<int>> dp(n + 1, std::vector<int>(capacity + 1, 0));
     // Build the dp table
     for (int i = 1; i <= n; ++i) {
-        #pragma omp parallel for num_threads(numThreads) // Adjust the number of threads as needed
+        #pragma omp parallel for
         for (int w = 0; w <= capacity; ++w) {
             if (weights[i - 1] <= w) {
                 dp[i][w] = std::max(dp[i - 1][w], dp[i - 1][w - weights[i - 1]] + values[i - 1]);

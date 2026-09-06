@@ -21,8 +21,28 @@ Graph build_graph(const std::vector<int> &weights, int capacity, int item_block,
 		const int rows_local = i_end - i_start;
 		for (int q = 0; q < nq; ++q)
 		{
+			const int lo = q * cap_block;
 			const int width = std::min(cap_block, capacity + 1 - q * cap_block);
-			NodeData nd{b, q, rows_local + 1, width, 0, BlockMatrix::Zero(rows_local + 1, width)};
+			const int hi = lo + width - 1;
+			// Every cell of the block is overwritten by solve_dag before it is
+			// read (row 0 for all c, then rows a+1 for all c), so skip zeroing.
+			NodeData nd{b, q, rows_local + 1, width, 0, lo, hi, {}, BlockMatrix(rows_local + 1, width)};
+
+			// Per-item dependency range: the capacity interval read from the
+			// source row when taking local item a. Empty marker {1,0} when the
+			// item never fits in this tile's capacity range.
+			nd.dep_ranges.reserve(static_cast<std::size_t>(rows_local));
+			for (int a = 0; a < rows_local; ++a)
+			{
+				const int wi = weights[i_start + a];
+				const int dlo = lo - wi;
+				const int dhi = (q + 1) * cap_block - 1 - wi;
+				if (dhi < 0 || dlo > capacity)
+					nd.dep_ranges.emplace_back(1, 0);
+				else
+					nd.dep_ranges.emplace_back(std::max(dlo, 0), std::min(dhi, capacity));
+			}
+
 			const auto v = boost::add_vertex(g);
 			g[v] = std::move(nd);
 		}
@@ -32,6 +52,7 @@ Graph build_graph(const std::vector<int> &weights, int capacity, int item_block,
 	{
 		const int i_start = b * item_block;
 		const int i_end = std::min((b + 1) * item_block, n);
+		const int rows_local = i_end - i_start;
 		for (int q = 0; q < nq; ++q)
 		{
 			const auto dst = static_cast<std::size_t>(b) * nq + q;
@@ -39,33 +60,43 @@ Graph build_graph(const std::vector<int> &weights, int capacity, int item_block,
 			// Straight-above tile in the previous item-block.
 			if (b >= 1)
 				boost::add_edge(static_cast<std::size_t>(b - 1) * nq + q, dst, g);
-			for (int i = i_start; i < i_end; ++i)
-			{
-				const int wi = weights[i];
-				// Capacity range that, after subtracting this item's weight, falls
-				// inside the current tile. This is where "take item" reads from.
-				int lo = q * cap_block - wi;
-				int hi = (q + 1) * cap_block - 1 - wi;
-				if (hi < 0 || lo > capacity)
-					continue;
-				lo = std::max(lo, 0);
-				hi = std::min(hi, capacity);
 
-				// Capacity-blocks in the row above overlapping [lo, hi].
+			// Gather, sort and merge the per-item dependency intervals so each
+			// source edge is added at most once (strict dedup, edge set/levels
+			// unchanged). The edge set spans the same [loM, hiM] range as the
+			// union of all per-item intervals.
+			std::vector<std::pair<int, int>> merged;
+			for (int a = 0; a < rows_local; ++a)
+			{
+				const auto [lo_ij, hi_ij] = g[dst].dep_ranges[a];
+				if (lo_ij <= hi_ij)
+					merged.emplace_back(lo_ij, hi_ij);
+			}
+			std::sort(merged.begin(), merged.end());
+			std::vector<std::pair<int, int>> merged2;
+			for (const auto &[lo_i, hi_i] : merged)
+			{
+				if (!merged2.empty() && lo_i <= merged2.back().second + 1)
+					merged2.back().second = std::max(merged2.back().second, hi_i);
+				else
+					merged2.push_back({lo_i, hi_i});
+			}
+			merged = std::move(merged2);
+
+			for (const auto &[loM, hiM] : merged)
+			{
+				const int qp_lo = loM / cap_block;
+				const int qp_hi = hiM / cap_block;
+
+				// Capacity-blocks in the row above overlapping [loM, hiM].
 				if (b >= 1)
 				{
-					for (int qp = 0; qp < nq; ++qp)
-					{
-						if (qp * cap_block <= hi && (qp + 1) * cap_block - 1 >= lo)
-							boost::add_edge(static_cast<std::size_t>(b - 1) * nq + qp, dst, g);
-					}
+					for (int qp = qp_lo; qp <= qp_hi && qp < nq; ++qp)
+						boost::add_edge(static_cast<std::size_t>(b - 1) * nq + qp, dst, g);
 				}
-				// Same-row capacity-blocks to the left overlapping [lo, hi].
-				for (int qp = 0; qp < q; ++qp)
-				{
-					if (qp * cap_block <= hi && (qp + 1) * cap_block - 1 >= lo)
-						boost::add_edge(static_cast<std::size_t>(b) * nq + qp, dst, g);
-				}
+				// Same-row capacity-blocks to the left overlapping [loM, hiM].
+				for (int qp = qp_lo; qp <= qp_hi && qp < q; ++qp)
+					boost::add_edge(static_cast<std::size_t>(b) * nq + qp, dst, g);
 			}
 		}
 	}
@@ -99,10 +130,9 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 	if (nb == 0 || nq == 0)
 		return 0;
 
-	// Assign each tile a longest-path wavefront level. Tiles with the same
-	// level (same anti-diagonal b+q) are mutually independent and can be
-	// computed in parallel; successive levels must be processed serially.
-	compute_levels(g);
+	// Assign each tile its longest-path level.
+	// Tiles with the same level have no dependency path between them
+	// and can therefore be evaluated in parallel.	compute_levels(g);
 
 	int max_level = 0;
 	for (int b = 0; b < nb; ++b)
@@ -142,7 +172,7 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 				}
 				else
 				{
-					const int wp = q * cap_block + c;
+					const int wp = nd.lo + c;
 					const int q_prev = wp / cap_block;
 					const int c_prev = wp - q_prev * cap_block;
 					const NodeData &src = g[static_cast<std::size_t>(b - 1) * nq + q_prev];
@@ -152,13 +182,12 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 
 			// Interior rows: classic skip/take recurrence.
 			//
-#pragma omp parallel for
 			for (int a = 0; a < rows_local; ++a)
 			{
 				const int i = i_start + a;
 				const int wi = weights[i];
 				const int pi = values[i];
-				const int lo = q * cap_block;
+				const int lo = nd.lo;
 				for (int c = 0; c < width; ++c)
 				{
 					const int wp = lo + c;
@@ -190,7 +219,7 @@ int solve_dag(Graph &g, const std::vector<int> &weights, const std::vector<int> 
 	}
 
 	const NodeData &last = g[static_cast<std::size_t>(nb - 1) * nq + (nq - 1)];
-	const int c_last = capacity - (nq - 1) * cap_block;
+	const int c_last = capacity - last.lo;
 	return last.block(last.rows - 1, c_last);
 }
 

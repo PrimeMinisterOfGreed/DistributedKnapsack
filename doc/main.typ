@@ -7,7 +7,7 @@
   #v(1em)
 ]
 
-= Introduzione
+/*= Introduzione
 #include "chapters/introduzione.typ"
 = Soluzioni parallele al Knapsack 0/1
 
@@ -20,4 +20,7 @@ per lo scheduling di task operativi satellitari @surveymethods in particolare pe
 = Risultati
 #include "chapters/risultati.typ"
 
-#bibliography("biblio.bib", title: none)
+#bibliography("biblio.bib", title: none)*/
+
+
+

@@ -119,6 +119,23 @@ cioè le sue **dipendenze**. Il grafo `Graph` (un `boost::adjacency_list`) ha:
   (ordine row-major);
 - **un arco `u → v`** = "il tile `v` ha bisogno dei dati di `u`".
 
+Ogni vertice porta i dati del proprio tile in un `NodeData` (attaccato al
+vertice del grafo). Oltre alla matrice `block` (`rows × width`), ogni nodo
+conserva:
+
+- `lo` = prima colonna di capacità posseduta dal tile (= `q·cap_block`);
+- `hi` = ultima colonna di capacità posseduta (= `lo + width - 1`);
+- `dep_ranges` = `std::vector<std::pair<int,int>>` con una entry per riga
+  locale di item `a` (`a ∈ [0, rows_local)`); l'entry `a` contiene
+  l'intervallo di capacità `[lo,hi]` clampato letto dalla riga sorgente quando
+  si prende l'item `a`, cioè lo stesso intervallo che §3.2/§3.3 descrivono per
+  la creazione degli archi. Il marcatore vuoto `{1,0}` (`first > second`) segna
+  un item che non entra mai nell'intervallo di capacità del tile.
+
+`build_graph` calcola `lo`, `hi` e `dep_ranges` **una sola volta** quando crea
+ciascun vertice: il ciclo che crea gli archi legge quindi questi valori invece
+di ricalcolarli per ogni item.
+
 Ci sono **tre tipi di dipendenze**:
 
 ### 3.1. Tile direttamente sopra (boundary)
@@ -204,7 +221,8 @@ nell'allineamento di sequenze con l'algoritmo
 
 ## 5. Come viene calcolato ogni tile
 
-Per ogni tile `(b,q)` in ordine topologico:
+Per ogni tile `(b,q)` in ordine topologico (`solve_dag` usa `NodeData.lo`
+come sua base di capacità):
 
 1. **Riga boundary (riga 0)**:
    - se `b == 0`: tutte le celle a zero;
@@ -215,8 +233,12 @@ Per ogni tile `(b,q)` in ordine topologico:
 
 2. **Righe interne (item del blocco)**: per ogni riga `a` e colonna `c`:
    - `v = block(a, c)` (salta l'item);
+   - sia `lo_tile = NodeData.lo` la **base capacità** del tile, cioè la sua
+     prima colonna di capacità (= `q·cap_block`). NON è l'`lo` di §3.2, che
+     indica invece l'intervallo di dipendenza per item (`q·cap_block - wi`);
    - se `wi <= wp`, calcola `src = wp - wi`:
-     - se `src >= lo`: `cand = block(a, src-lo) + vi` (stesso tile);
+     - se `src >= lo_tile`: `cand = block(a, src - lo_tile) + vi`
+       (stesso tile, colonna locale `src - lo_tile`);
      - altrimenti: `cand = block(a, c_prev) + vi` del tile sinistro `(b, q_prev)`;
    - `v = max(v, cand)`;
    - scrivi `block(a+1, c) = v`.

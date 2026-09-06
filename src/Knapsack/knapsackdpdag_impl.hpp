@@ -1,6 +1,7 @@
 #pragma once
 #include <Eigen/Dense>
 #include <boost/graph/adjacency_list.hpp>
+#include <utility>
 #include <vector>
 
 /** @brief Row-major integer matrix used for a tile's DP block. */
@@ -16,13 +17,26 @@ using BlockMatrix = Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::Ro
  * The DP block is an Eigen matrix with `rows` rows and `width` columns
  * (row-major, so block(r, c) is the cell for item r and capacity offset c),
  * where row 0 is the boundary value inherited from the tile above.
+ *
+ * `lo` is the first capacity column owned by this tile (= q * cap_block) and
+ * `hi` the last (= lo + width - 1). `dep_ranges` has one entry per local item
+ * row `a` (a in [0, rows_local), i.e. rows_local == rows - 1 entries); entry a
+ * records the clamped capacity interval read from the source row when taking
+ * local item a, or an empty marker {1,0} (first > second) when item a never
+ * fits in this tile's capacity range.
  */
 struct NodeData
 {
-	int b, q;		 // tile grid coordinates
-	int rows;		 // rows_local + 1 (number of rows in this tile's block)
-	int width;		 // wq (number of columns in this tile's block)
-	int level;		 // longest-path wavefront level (for future parallelization)
+	int b, q;  // tile grid coordinates
+	int rows;  // rows_local + 1 (number of rows in this tile's block)
+	int width; // wq (number of columns in this tile's block)
+	int level; // longest-path wavefront level (for future parallelization)
+	int lo;	   // first capacity column owned by this tile (= q * cap_block)
+	int hi;	   // last capacity column owned by this tile (= lo + width - 1)
+	// dep_ranges[a] = clamped capacity interval read from the source row when
+	// taking local item a; empty marker {1,0} (first > second) when item a
+	// never fits in this tile's capacity range.
+	std::vector<std::pair<int, int>> dep_ranges;
 	BlockMatrix block; // DP block, dimensions rows x width
 };
 

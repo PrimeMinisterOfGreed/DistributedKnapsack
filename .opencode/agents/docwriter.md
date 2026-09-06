@@ -1,6 +1,6 @@
 ---
 description: Expert documentation writer with access to all content in the doc folder
-mode: primary
+mode: subagent
 permission:
   edit:
     "doc/**/*": allow
