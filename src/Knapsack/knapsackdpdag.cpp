@@ -64,10 +64,12 @@ Graph build_graph(const std::vector<int> &weights, int capacity, int item_block,
 				const int wi = weights[i_start + a];
 				const int dlo = lo - wi;
 				const int dhi = (q + 1) * cap_block - 1 - wi;
-				if (dhi < 0 || dlo > capacity)
-					nd.dep_ranges.emplace_back(1, 0);
-				else
-					nd.dep_ranges.emplace_back(std::max(dlo, 0), std::min(dhi, capacity));
+				//				if (dhi < 0 || dlo > capacity)
+				//					nd.dep_ranges.emplace_back(1, 0);
+				//				else
+				nd.dep_ranges.emplace_back(std::max(dlo, 0), std::min(dhi, capacity));
+
+				// nd.dep_ranges.emplace_back(dlo, dhi);
 			}
 
 			const auto v = boost::add_vertex(g);
@@ -88,40 +90,21 @@ Graph build_graph(const std::vector<int> &weights, int capacity, int item_block,
 			if (b >= 1)
 				boost::add_edge(static_cast<std::size_t>(b - 1) * nq + q, dst, g);
 
-			// Gather, sort and merge the per-item dependency intervals so each
-			// source edge is added at most once (strict dedup, edge set/levels
-			// unchanged). The edge set spans the same [loM, hiM] range as the
-			// union of all per-item intervals.
-			std::vector<std::pair<int, int>> merged;
+			// Edge per item: add the tile-above and same-row left source tiles
 			for (int a = 0; a < rows_local; ++a)
 			{
 				const auto [lo_ij, hi_ij] = g[dst].dep_ranges[a];
-				if (lo_ij <= hi_ij)
-					merged.emplace_back(lo_ij, hi_ij);
-			}
-			std::sort(merged.begin(), merged.end());
-			std::vector<std::pair<int, int>> merged2;
-			for (const auto &[lo_i, hi_i] : merged)
-			{
-				if (!merged2.empty() && lo_i <= merged2.back().second + 1)
-					merged2.back().second = std::max(merged2.back().second, hi_i);
-				else
-					merged2.push_back({lo_i, hi_i});
-			}
-			merged = std::move(merged2);
-
-			for (const auto &[loM, hiM] : merged)
-			{
-				const int qp_lo = loM / cap_block;
-				const int qp_hi = hiM / cap_block;
-
-				// Capacity-blocks in the row above overlapping [loM, hiM].
+				if (lo_ij > hi_ij)
+					continue;
+				const int qp_lo = lo_ij / cap_block;
+				const int qp_hi = hi_ij / cap_block;
+				// Capacity-blocks in the row above overlapping [lo_ij, hi_ij].
 				if (b >= 1)
 				{
 					for (int qp = qp_lo; qp <= qp_hi && qp < nq; ++qp)
 						boost::add_edge(static_cast<std::size_t>(b - 1) * nq + qp, dst, g);
 				}
-				// Same-row capacity-blocks to the left overlapping [loM, hiM].
+				// Same-row capacity-blocks to the left overlapping [lo_ij, hi_ij].
 				for (int qp = qp_lo; qp <= qp_hi && qp < q; ++qp)
 					boost::add_edge(static_cast<std::size_t>(b) * nq + qp, dst, g);
 			}

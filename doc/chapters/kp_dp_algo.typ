@@ -42,9 +42,6 @@
           "Risoluzione DAG",
           ($G$, $C$),
           {
-            Comment[l'ordine row-major $(b, q)$ è un ordinamento topologico valido]
-
-            Comment[Risoluzione per tile in ordine topologico]
             For($"tile" (b, q) space "in ordine row-major"$, {
               Assign[$"block"$][matrice della tile con $"rows" = "item_block" + 1$]
               If(
@@ -107,3 +104,29 @@
   supplement: none,
 );
 
+
+
+
+#let GenerateDAG = algorithm-figure(
+  "KnapsackDPDAG.GenerateDAG",
+  {
+    import algorithmic: *
+    let AddVertex = Call.with("AddVertex")
+    Procedure("GenerateDAG", ("weights:[]", "capacity", "item_block", "cap_block"), {
+      Assign[$"nb"$][$ceil(n/"item_block")$]
+      Assign[$"nq"$][$ceil(("capacity"+1)/"cap_block")$]
+      Assign[$g$][$"Graph{}"$]
+      Comment[Fase 1: creazione vertici]
+      For($b in "(0..nb-1)"$, {
+        For($q in "(0..nq-1)"$, {
+          AddVertex[$(b,q)$]
+        })
+      })
+      For($b in "(0..nb-1)"$, {
+        For($q in "(0..nq-1)"$, {
+          AddVertex[$(b,q)$]
+        })
+      })
+    })
+  },
+)
