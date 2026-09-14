@@ -1,9 +1,12 @@
 
 #import "@preview/algorithmic:1.0.7"
-#import algorithmic: Line, algorithm-figure, style-algorithm
+#import algorithmic: Line, algorithm-figure, iflike, style-algorithm
 #import "@preview/codelst:2.0.2": sourcecode
 
-#show: style-algorithm
+
+
+#let ParallelFor = iflike.with(kw1: "for", kw2: "do in parallel", kw3: "end")
+
 #let dp_algo_dag_sequential = algorithm-figure(
   "Tiled Knapsack DP",
   inset: 0.42em,
@@ -104,7 +107,52 @@
   supplement: none,
 );
 
+#let KpDp = algorithm-figure("Knapsack DP: Naive frontier parallel", {
+  import algorithmic: *
+  Procedure("Knapsack DP", ("w:[]", "v:[]", "C: int"), {
+    Assign[$n$][$"len(w)"$]
+    Assign[$"dp"$][$"[][]"$]
+    ParallelFor($i in "(0..n)"$, {
+      IfElseChain(
+        $"weights"[i-1] <= w$,
+        {
+          Assign[$"dp[i][w]"$][$"max(dp[i-1][w],dp[i-1][w-weights[i-1]] + values[i-1])"$]
+        },
+        {
+          Assign[$"dp[i][w]"$][$"dp[i-1][w]"$]
+        },
+      )
+    })
+  })
+})
 
+#let KpDpDag = algorithm-figure(
+  "KnapsackDPDAG",
+  {
+    import algorithmic: *
+    let ww = "weights"
+    let vv = "values"
+    let cc = "capacity"
+    let ib = "item_block"
+    let cb = "cap_block"
+    Procedure("KnapsackDPDAG", ("weights:[]", "values:[]", "capacity", "item_block", "cap_block"), {
+      Assign[$g$][#CallInline("GenerateDAG", [$ww,vv,cc,ib,cb$])]
+      Assign[$n$][#CallInline[$"len"$][$w$]]
+      Comment[I vertici del DAG sono in ordine topologico]
+      Assign[$"levels"$][#CallInline("AssignLevels", [$"DAG"$])]
+      For($v in g$, {
+        Assign[$L$][$"level[v]"$]
+        Call[Append][$"by_level[L]"$,$v$]
+      })
+      For($l in "(0..L)"$, {
+        ParallelFor($v in "by_level[l]"$, {
+          CallInline("ComputeTile", "v")
+        })
+      })
+      Return[$"DP[n][capacity]"$]
+    })
+  },
+)
 
 
 #let GenerateDAG = algorithm-figure(
@@ -112,6 +160,7 @@
   {
     import algorithmic: *
     let AddVertex = Call.with("AddVertex")
+    let AddEdge = Call.with("AddEdge")
     Procedure("GenerateDAG", ("weights:[]", "capacity", "item_block", "cap_block"), {
       Assign[$"nb"$][$ceil(n/"item_block")$]
       Assign[$"nq"$][$ceil(("capacity"+1)/"cap_block")$]
@@ -124,7 +173,64 @@
       })
       For($b in "(0..nb-1)"$, {
         For($q in "(0..nq-1)"$, {
-          AddVertex[$(b,q)$]
+          Comment[La line è l'indice della linea all'interno della DP]
+          For($"line" in (b,q)$, {
+            If($exists w in "line" | exists x in "Pred"(w) in.not (b,q)$, {
+              Comment[Si aggiunge allora un arco tra il blocco corrente e quello con il predecessore]
+              AddEdge[$(m,n) | x in (m,n),(b,q)$]
+            })
+          })
+        })
+      })
+      Return[$g$]
+    })
+  },
+)
+
+#let AssignLevels = algorithm-figure(
+  "KnapsackDPDAG.AssignLevels",
+  {
+    import algorithmic: *
+    Procedure("KnapsackDPDAG.AssignLevels", "g", {
+      Comment[i vertici vengono inseriti in ordine row-major e quindi in ordine topologico]
+      For($v in g$, {
+        IfElseChain(
+          $"Pred(v)" = emptyset$,
+          {
+            Assign["level[v]"][0]
+          },
+          {
+            Assign["level[v]"][$max("p.level" in "Pred"(v)) + 1$]
+          },
+        )
+      })
+      Return[$"level"$]
+    })
+  },
+)
+
+#let ComputeTile = algorithm-figure(
+  "KnapsackDPDAG.ComputeTile",
+  {
+    import algorithmic: *
+    Procedure("KnapsackDPDAG.ComputeTile", ("dp", "tile", "weights", "values"), {
+      Assign[$"i_start,i_end"$][$"first-item","last-item"$]
+      Assign[$"w_start","w_end"$][$"first-cap","last_cap"$]
+      For($i in "(i_start,i_end)"$, {
+        Assign[w_i]["weights[i]"]
+        Assign[v_i]["values[i]"]
+        For($w in "(w_start,w_end)"$, {
+          Assign[$"skip"$][$"DP[i-1][w]"$]
+          IfElseChain(
+            $w >= w_i$,
+            {
+              Assign[$"take"$][$"DP[i-1][w-w_i]" + v_i$]
+              Assign[$"DP[i][w]"$][$max("skip", "take")$]
+            },
+            {
+              Assign[$"DP[i][w]"$][$"skip"$]
+            },
+          )
         })
       })
     })

@@ -2,6 +2,7 @@
 #include "Knapsack/knapsackdpdag_impl.hpp"
 #include "time.hpp"
 #include <iostream>
+#include <pybind11/cast.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <spdlog/spdlog.h>
@@ -35,7 +36,7 @@ struct KnapsackArguments
 
 KnapsackSolution knapsackdpsolver(KnapsackArguments args)
 {
-	return knapsackdp(args.weights, args.values, args.capacity);
+	return knapsackdp(args.weights, args.values, args.capacity, 0);
 }
 
 KnapsackSolution knapsackcopasolver(KnapsackArguments args)
@@ -73,7 +74,12 @@ PYBIND11_MODULE(libdistributed_knapsack, m)
 		.def_readwrite("weights", &KnapsackArguments::weights)
 		.def_readwrite("values", &KnapsackArguments::values)
 		.def_readwrite("capacity", &KnapsackArguments::capacity);
-	m.def("knapsackdp", &knapsackdpsolver, py::arg("args"));
+	m.def(
+		"knapsackdp",
+		[](KnapsackArguments args, int cap_block) {
+			return knapsackdp(args.weights, args.values, args.capacity, cap_block);
+		},
+		py::arg("args"), py::arg("cap_block") = 1);
 	m.def("knapsackcopa", &knapsackcopasolver, py::arg("args"));
 	m.def("knapsackcopasequential", &knapsackcopasequentialsolver, py::arg("args"));
 	m.def(
