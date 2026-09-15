@@ -36,7 +36,7 @@ struct KnapsackArguments
 
 KnapsackSolution knapsackdpsolver(KnapsackArguments args)
 {
-	return knapsackdp(args.weights, args.values, args.capacity, 0);
+	return knapsackdp(args.weights, args.values, args.capacity);
 }
 
 KnapsackSolution knapsackcopasolver(KnapsackArguments args)
@@ -76,9 +76,7 @@ PYBIND11_MODULE(libdistributed_knapsack, m)
 		.def_readwrite("capacity", &KnapsackArguments::capacity);
 	m.def(
 		"knapsackdp",
-		[](KnapsackArguments args, int cap_block) {
-			return knapsackdp(args.weights, args.values, args.capacity, cap_block);
-		},
+		[](KnapsackArguments args, int cap_block) { return knapsackdp(args.weights, args.values, args.capacity); },
 		py::arg("args"), py::arg("cap_block") = 1);
 	m.def("knapsackcopa", &knapsackcopasolver, py::arg("args"));
 	m.def("knapsackcopasequential", &knapsackcopasequentialsolver, py::arg("args"));

@@ -9,8 +9,7 @@ struct KnapsackSolution
 	int totalWeight;		// Total weight of the included items
 };
 
-KnapsackSolution knapsackdp(const std::vector<int> &weights, const std::vector<int> &values, int capacity,
-							int cap_block = 1);
+KnapsackSolution knapsackdp(const std::vector<int> &weights, const std::vector<int> &values, int capacity);
 std::optional<KnapsackSolution> knapsackcopasequential(const std::vector<int> &weights, const std::vector<int> &values,
 													   int capacity);
 
