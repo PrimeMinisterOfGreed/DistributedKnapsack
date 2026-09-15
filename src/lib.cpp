@@ -7,6 +7,15 @@
 #include <pybind11/stl.h>
 #include <spdlog/spdlog.h>
 
+#ifdef KP_GPU
+#include "knapsackdp.hpp"
+#endif
+
+#ifdef KP_MPI
+#include "Knapsackmpi/knapsackmpi.hpp"
+#include <boost/mpi.hpp>
+#endif
+
 namespace py = pybind11;
 
 void hello()
@@ -55,6 +64,26 @@ KnapsackSolution knapsackcopasequentialsolver(KnapsackArguments args)
 	return KnapsackSolution();
 }
 
+#ifdef KP_GPU
+KnapsackSolution knapsackdpgpusolver(KnapsackArguments args)
+{
+	const auto res = kp::gpu::knapsackdp(args.weights, args.values, args.capacity);
+	return KnapsackSolution{res.items, res.totalValue, res.totalWeight};
+}
+#endif
+
+#ifdef KP_MPI
+KnapsackSolution knapsackdpmpisolver(KnapsackArguments args)
+{
+	static boost::mpi::environment env;
+	static boost::mpi::communicator comm;
+	auto res = kp::mpi::knapsackdpmpi(comm, args.weights, args.values, args.capacity);
+	if (res.has_value())
+		return res.value();
+	return KnapsackSolution();
+}
+#endif
+
 void disable_logging()
 {
 	spdlog::set_level(spdlog::level::err);
@@ -80,6 +109,12 @@ PYBIND11_MODULE(libdistributed_knapsack, m)
 		py::arg("args"), py::arg("cap_block") = 1);
 	m.def("knapsackcopa", &knapsackcopasolver, py::arg("args"));
 	m.def("knapsackcopasequential", &knapsackcopasequentialsolver, py::arg("args"));
+#ifdef KP_GPU
+	m.def("knapsackdpgpu", &knapsackdpgpusolver, py::arg("args"));
+#endif
+#ifdef KP_MPI
+	m.def("knapsackdpmpi", &knapsackdpmpisolver, py::arg("args"));
+#endif
 	m.def(
 		"knapsackdpdag",
 		[](KnapsackArguments args, int item_block, int cap_block) {

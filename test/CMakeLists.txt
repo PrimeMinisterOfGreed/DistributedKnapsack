@@ -26,3 +26,7 @@ add_test(
 )
 set_tests_properties(python_hello_test PROPERTIES ENVIRONMENT_MODIFICATION "PYTHONPATH=path_list_prepend:$<TARGET_FILE_DIR:distributed_knapsack>")
 
+if(KP_MPI)
+    add_subdirectory(${PROJECT_SOURCE_DIR}/mpi/test ${CMAKE_BINARY_DIR}/test/mpi)
+endif()
+

@@ -8,6 +8,8 @@
 #include <chrono>
 extern ProgramOptions options;
 
+using kp::mpi::knapsackdpmpi;
+
 TEST(KnapsackDPMPI, EmptyItemsReturnsZero)
 {
 	int rank, world_size;

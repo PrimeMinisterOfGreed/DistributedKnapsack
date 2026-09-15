@@ -2,13 +2,22 @@ cmake_minimum_required(VERSION 3.26)
 project(DistributedKnapsack C CXX)
 
 
+option(KP_GPU "Build and expose the CUDA/Thrust knapsack solver" OFF)
+option(KP_MPI "Build and expose the MPI knapsack solver" OFF)
+
 find_package(OpenMP REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Python3 3.12 COMPONENTS Development Interpreter REQUIRED)
 find_package(pybind11 CONFIG REQUIRED)
-find_package(Boost REQUIRED COMPONENTS container)
 find_package(Eigen3 REQUIRED)
 find_package(spdlog REQUIRED)
+
+if(KP_MPI)
+  find_package(Boost REQUIRED COMPONENTS container mpi serialization)
+  find_package(MPI REQUIRED)
+else()
+  find_package(Boost REQUIRED COMPONENTS container)
+endif()
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,5 +45,19 @@ target_include_directories(distributed_knapsack PUBLIC src include ${OpenMP_CXX_
 target_compile_options(distributed_knapsack PUBLIC ${OpenMP_CXX_FLAGS} ${OpenMP_C_FLAGS} ${Boost_COMPILE_OPTIONS} -fmodules)
 # Link OpenMP libraries
 target_link_libraries(distributed_knapsack PUBLIC OpenMP::OpenMP_CXX OpenMP::OpenMP_C fmt::fmt spdlog::spdlog pybind11::pybind11 Eigen3::Eigen)
+
+if(KP_GPU)
+  target_compile_definitions(distributed_knapsack PRIVATE KP_GPU=1)
+  add_subdirectory(gpu)
+  target_link_libraries(distributed_knapsack PUBLIC distributed_knapsack_gpu)
+  target_include_directories(distributed_knapsack PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/gpu/include)
+endif()
+
+if(KP_MPI)
+  target_compile_definitions(distributed_knapsack PRIVATE KP_MPI=1)
+  add_subdirectory(mpi)
+  target_link_libraries(distributed_knapsack PUBLIC distributed_knapsack_mpi)
+  target_include_directories(distributed_knapsack PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/mpi ${CMAKE_CURRENT_SOURCE_DIR}/mpi/Knapsackmpi)
+endif()
 
 add_subdirectory(test)

@@ -5,6 +5,8 @@
 #include <omp.h>
 #include <ranges>
 
+namespace kp::mpi
+{
 std::optional<KnapsackSolution> knapsackcopampi(boost::mpi::communicator &comm, const std::vector<int> &weights,
 												const std::vector<int> &values, int capacity)
 {
@@ -112,3 +114,4 @@ std::optional<KnapsackSolution> knapsackcopampi(boost::mpi::communicator &comm, 
 	}
 	return {};
 }
+} // namespace kp::mpi
