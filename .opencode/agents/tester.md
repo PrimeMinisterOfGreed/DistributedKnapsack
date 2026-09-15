@@ -1,6 +1,6 @@
 ---
 description: Testing expert with access to all content in the tests folder
-mode: primary
+mode: subagent
 permission:
   edit:
     "tests/**/*": allow

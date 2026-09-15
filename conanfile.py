@@ -20,7 +20,6 @@ class DistKnapsack(ConanFile):
         self.requires("spdlog/1.17.0")
         self.requires("pybind11/2.13.6")
         self.requires("eigen/5.0.1")
-
         pass
 
 
