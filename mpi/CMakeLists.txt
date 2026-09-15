@@ -10,6 +10,9 @@ target_include_directories(${MPI_TARGET_NAME} PUBLIC
     ${Boost_INCLUDE_DIRS}
 )
 target_compile_options(${MPI_TARGET_NAME} PUBLIC ${OpenMP_CXX_FLAGS} ${Boost_COMPILE_OPTIONS})
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  target_compile_definitions(${MPI_TARGET_NAME} PUBLIC ENABLE_TIMERS=1)
+endif()
 target_link_libraries(${MPI_TARGET_NAME} PUBLIC
     MPI::MPI_CXX Boost::mpi Boost::serialization fmt::fmt spdlog::spdlog OpenMP::OpenMP_CXX
 )
