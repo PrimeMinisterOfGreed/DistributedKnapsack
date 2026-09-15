@@ -7,8 +7,15 @@ import os
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Optional
 from pathlib import Path
+from mpi4py import MPI  # type: ignore
 from libdistributed_knapsack import (KnapsackArguments, KnapsackSolution, knapsackdp, knapsackcopa,
-                                     knapsackcopasequential, knapsackdpdag, get_all_sections, get_dag_stats)
+                                     knapsackcopasequential, knapsackdpdag, knapsackdpmpi, knapsackdpgpu,
+                                     get_all_sections, get_dag_stats)
+
+
+def ensure_mpi_initialized() -> None:
+    if not MPI.Is_initialized():
+        MPI.Init()
 
 
 class BenchmarkTest(ABC):
@@ -17,6 +24,7 @@ class BenchmarkTest(ABC):
         self.numThreads: int = 1
         self.numItems: int = 0
         self.testType :str = ""
+        self.is_mpi_test: bool = False
     @abstractmethod
     def onExecute(self) -> KnapsackSolution:
         pass
@@ -60,6 +68,21 @@ class BenchmarkKnapsackDPDAG(BenchmarkTest):
         return knapsackdpdag(self.args, self.item_block, self.cap_block)
 
 
+class BenchmarkKnapsackDPMPI(BenchmarkTest):
+    def __init__(self) -> None:
+        super().__init__()
+        self.is_mpi_test = True
+
+    def onExecute(self) -> KnapsackSolution:
+        ensure_mpi_initialized()
+        return knapsackdpmpi(self.args)
+
+
+class BenchmarkKnapsackDPGPU(BenchmarkTest):
+    def onExecute(self) -> KnapsackSolution:
+        return knapsackdpgpu(self.args)
+
+
 class TestRegister:
     def __init__(self, save_file: Optional[str] = None, capacity: int = 0) -> None:
         self._tests: Dict[str, BenchmarkTest] = {}
@@ -82,12 +105,12 @@ class TestRegister:
             
         file_exists = os.path.exists(self._save_file)
         
-        processors = test.numThreads
-        test_type = test.testType
+        processors = MPI.COMM_WORLD.size if test.is_mpi_test else test.numThreads
+        test_type = "distributed memory" if test.is_mpi_test else "shared memory"
         
         with open(self._save_file, mode='a', newline='') as f:
             writer = csv.writer(f)
-            hostname = os.uname().nodename
+            hostname = MPI.Get_processor_name() if test.is_mpi_test else os.uname().nodename
             if not file_exists:
                 writer.writerow(['hostname','testname', 'testtype', 'time', 'processors', 'solution_weight', 'solution_profit', 'capacity', 'num_items'])
             writer.writerow([hostname, test_name, test_type, f"{duration:.4f}", processors, result.totalWeight, result.totalValue, self._capacity, test.numItems])
@@ -102,6 +125,9 @@ class TestRegister:
         
         for test_name, test in tests_to_run.items():
             duration, result = test.execute()
+
+            if test.is_mpi_test and MPI.COMM_WORLD.rank != 0:
+                continue  # Only rank 0 prints/saves results for MPI tests
 
             print(f"{test_name}: {duration:.4f}s | Items: {test.numItems} | "
                   f"Profit: {result.totalValue} | Weight: {result.totalWeight}")
