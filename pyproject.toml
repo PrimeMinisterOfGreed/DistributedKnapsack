@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "distributedknapsack"
+version = "0.1.0"
+description = "Python bindings and benchmarking tools for the DistributedKnapsack solver"
+requires-python = ">=3.12"
+dependencies = [
+    "mpi4py>=4.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+]
+
+[tool.setuptools]
+packages = ["distributedknapsack"]

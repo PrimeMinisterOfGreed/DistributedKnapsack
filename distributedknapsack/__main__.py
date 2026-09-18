@@ -11,7 +11,8 @@ import argparse
 
 from testengine import (
     TestRegister, BenchmarkKnapsackDP, BenchmarkKnapsackCOPA,
-    BenchmarkKnapsackCOPASerial, BenchmarkKnapsackDPDAG
+    BenchmarkKnapsackCOPASerial, BenchmarkKnapsackDPDAG,
+    BenchmarkKnapsackDPMPI, BenchmarkKnapsackDPGPU
 )
 
 def generate_data(num_items: int, min_weight: int, max_weight: int,
@@ -27,7 +28,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Distributed Knapsack Benchmark")
     parser.add_argument("--test", type=str, default="all", 
                         help="Test to run: knapsackdp, knapsackcopa, knapsackcopa_serial, "
-                             "knapsackdpdag, all")
+                             "knapsackdpdag, knapsackdp_mpi, knapsackdp_gpu, all")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--numItems", type=int, default=30, help="Number of items")
     parser.add_argument("--numThreads", type=int, default=1, help="Number of threads")
@@ -54,6 +55,8 @@ if __name__ == "__main__":
     register.register("knapsackcopa", BenchmarkKnapsackCOPA())
     register.register("knapsackcopa_serial", BenchmarkKnapsackCOPASerial())
     register.register("knapsackdpdag", BenchmarkKnapsackDPDAG(args.itemBlock, args.capBlock))
+    register.register("knapsackdp_mpi", BenchmarkKnapsackDPMPI())
+    register.register("knapsackdp_gpu", BenchmarkKnapsackDPGPU())
     
     register.setup(weights, values, args.numThreads)
     register.run(args.test)

@@ -1,0 +1,19 @@
+spack:
+  include:
+    - ./packages.yaml
+  specs:
+    - boost+mpi+serialization+container
+    - cmake
+    - ninja
+    - fmt
+    - spdlog
+    - py-pybind11
+    - py-mpi4py
+    - eigen
+    - googletest
+    - openmpi
+    - python@3.12
+    - gcc@15.2.0
+  concretizer:
+    unify: true
+  view: true
