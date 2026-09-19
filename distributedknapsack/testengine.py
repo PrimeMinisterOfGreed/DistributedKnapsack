@@ -25,6 +25,7 @@ class BenchmarkTest(ABC):
         self.numItems: int = 0
         self.testType :str = ""
         self.is_mpi_test: bool = False
+        self.is_dag_test: bool = False
     @abstractmethod
     def onExecute(self) -> KnapsackSolution:
         pass
@@ -63,6 +64,7 @@ class BenchmarkKnapsackDPDAG(BenchmarkTest):
         super().__init__()
         self.item_block = item_block
         self.cap_block = cap_block
+        self.is_dag_test = True
 
     def onExecute(self) -> KnapsackSolution:
         return knapsackdpdag(self.args, self.item_block, self.cap_block)
@@ -84,10 +86,14 @@ class BenchmarkKnapsackDPGPU(BenchmarkTest):
 
 
 class TestRegister:
-    def __init__(self, save_file: Optional[str] = None, capacity: int = 0) -> None:
+    def __init__(self, save_file: Optional[str] = None, capacity: int = 0,
+                 min_weight: int = 0, max_weight: int = 0, seed: int = 0) -> None:
         self._tests: Dict[str, BenchmarkTest] = {}
         self._save_file = save_file
         self._capacity = capacity
+        self._min_weight = min_weight
+        self._max_weight = max_weight
+        self._seed = seed
 
     def register(self, name: str, test: BenchmarkTest) -> None:
         self._tests[name] = test
@@ -107,13 +113,22 @@ class TestRegister:
         
         processors = MPI.COMM_WORLD.size if test.is_mpi_test else test.numThreads
         test_type = "distributed memory" if test.is_mpi_test else "shared memory"
-        
+
+        frontier_min = frontier_median = frontier_mean = frontier_max = 0
+        if test.is_dag_test:
+            stats = get_dag_stats()
+            if stats.levels > 0:
+                frontier_min = stats.frontierMin
+                frontier_median = stats.frontierMedian
+                frontier_mean = stats.frontierMean
+                frontier_max = stats.frontierMax
+
         with open(self._save_file, mode='a', newline='') as f:
             writer = csv.writer(f)
             hostname = MPI.Get_processor_name() if test.is_mpi_test else os.uname().nodename
             if not file_exists:
-                writer.writerow(['hostname','testname', 'testtype', 'time', 'processors', 'solution_weight', 'solution_profit', 'capacity', 'num_items'])
-            writer.writerow([hostname, test_name, test_type, f"{duration:.4f}", processors, result.totalWeight, result.totalValue, self._capacity, test.numItems])
+                writer.writerow(['hostname','testname', 'testtype', 'time', 'processors', 'solution_weight', 'solution_profit', 'capacity', 'num_items', 'min_weight', 'max_weight', 'seed', 'frontier_min', 'frontier_median', 'frontier_mean', 'frontier_max'])
+            writer.writerow([hostname, test_name, test_type, f"{duration:.4f}", processors, result.totalWeight, result.totalValue, self._capacity, test.numItems, self._min_weight, self._max_weight, self._seed, frontier_min, frontier_median, frontier_mean, frontier_max])
 
     def run(self, name: str = "all") -> None:
         if name == "all":

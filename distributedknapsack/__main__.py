@@ -50,7 +50,9 @@ if __name__ == "__main__":
         args.minValue, args.maxValue, args.seed
     )
     
-    register = TestRegister(save_file=args.save, capacity=args.capacity)
+    register = TestRegister(save_file=args.save, capacity=args.capacity,
+                            min_weight=args.minWeight, max_weight=args.maxWeight,
+                            seed=args.seed)
     register.register("knapsackdp", BenchmarkKnapsackDP())
     register.register("knapsackcopa", BenchmarkKnapsackCOPA())
     register.register("knapsackcopa_serial", BenchmarkKnapsackCOPASerial())
