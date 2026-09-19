@@ -9,7 +9,6 @@
 
 set -euo pipefail
 
-
 NUM_THREADS=32
 SEED=42
 NUM_ITEMS=50
@@ -18,31 +17,30 @@ MAX_WEIGHT=5000
 # Clear previous results for a fresh run
 
 for threads in 1 2 4 8 16 32; do
-    for cap in 1000 10000 100000 1000000 10000000 100000000; do
-        echo "========================================"
-        echo "Capacity: $cap | Threads: $threads"
-        echo "========================================"
+  for cap in 1000 10000 100000 1000000; do
+    echo "========================================"
+    echo "Capacity: $cap | Threads: $threads"
+    echo "========================================"
 
-        echo "--- knapsackdp (shared memory) ---"
-        python3 distributedknapsack \
-            --test knapsackdp \
-            --capacity "$cap" \
-            --numItems "$NUM_ITEMS" \
-            --numThreads "$threads" \
-            --seed "$SEED" \
-            --maxWeight "$MAX_WEIGHT" \
+    export OMP_NUM_THREADS="$threads"
 
-        echo ""
-        echo "--- knapsackcopa (shared memory) ---"
-        python3  distributedknapsack \
-            --test knapsackcopa \
-            --capacity "$cap" \
-            --numItems "$NUM_ITEMS" \
-            --numThreads "$threads" \
-            --seed "$SEED" \
-            --maxWeight "$MAX_WEIGHT" \
+    echo "--- knapsackdp (shared memory) ---"
+    python3 distributedknapsack \
+      --test knapsackdp \
+      --capacity "$cap" \
+      --numItems "$NUM_ITEMS" \
+      --seed "$SEED" \
+      --maxWeight "$MAX_WEIGHT"
 
-        echo ""
-    done
+    echo ""
+    echo "--- knapsackcopa (shared memory) ---"
+    python3 distributedknapsack \
+      --test knapsackdpdag \
+      --capacity "$cap" \
+      --numItems "$NUM_ITEMS" \
+      --seed "$SEED" \
+      --maxWeight "$MAX_WEIGHT"
+
+    echo ""
+  done
 done
-

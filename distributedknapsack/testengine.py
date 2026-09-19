@@ -142,7 +142,11 @@ class TestRegister:
             stats = get_dag_stats()
             if stats:
                 print(f"    DAG stats: tiles={stats.tiles} edges={stats.edges} "
-                      f"levels={stats.levels} maxFrontier={stats.maxFrontier}")
+                      f"levels={stats.levels}")
+                if stats.levels > 0:
+                    print(f"    wavefront widths: min={stats.frontierMin:.0f} "
+                          f"median={stats.frontierMedian:.1f} mean={stats.frontierMean:.2f} "
+                          f"max={stats.frontierMax:.0f}")
 
             if self._save_file:
                 self._append_result(test_name, test, duration, result)

@@ -388,7 +388,8 @@ KnapsackSolution knapsackdpdag(const std::vector<int> &weights, const std::vecto
 	END_BLOCK("Dag Solve");
 
 	// DAG statistics: compute levels serially (outside any parallel region)
-	// and record tiles/edges/levels/maxFrontier for the Python report.
+	// and record tiles/edges/levels plus the wavefront-width summary.
+	g_last_dag_stats = DAGStats{};
 	compute_levels(g);
 	int max_level = 0;
 	for (int b = 0; b < nb; ++b)
@@ -398,13 +399,11 @@ KnapsackSolution knapsackdpdag(const std::vector<int> &weights, const std::vecto
 	for (int b = 0; b < nb; ++b)
 		for (int q = 0; q < nq; ++q)
 			++level_freq[static_cast<std::size_t>(g[static_cast<std::size_t>(b) * nq + q].level)];
-	int max_frontier = 0;
-	for (std::size_t L = 0; L < level_freq.size(); ++L)
-		max_frontier = std::max(max_frontier, level_freq[L]);
+	for (int cnt : level_freq)
+		g_last_dag_stats.frontier(cnt);
 	g_last_dag_stats.tiles = nb * nq;
 	g_last_dag_stats.edges = static_cast<int>(boost::num_edges(g));
 	g_last_dag_stats.levels = max_level + 1;
-	g_last_dag_stats.maxFrontier = max_frontier;
 
 	const std::vector<int> items = reconstruct_items(g, weights, values, capacity, item_block, cap_block);
 

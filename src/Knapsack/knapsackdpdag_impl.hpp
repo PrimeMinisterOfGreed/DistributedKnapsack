@@ -1,5 +1,11 @@
 #pragma once
 #include <Eigen/Dense>
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/max.hpp>
+#include <boost/accumulators/statistics/mean.hpp>
+#include <boost/accumulators/statistics/median.hpp>
+#include <boost/accumulators/statistics/min.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <utility>
 #include <vector>
@@ -48,15 +54,21 @@ using _Graph = boost::adjacency_list<vecS, vecS, bidirectionalS, property<vertex
 
 using Graph = _detail::_Graph;
 
+namespace ba = boost::accumulators;
+
+/** @brief Wavefront-width summary (mean/median/min/max over level bucket sizes). */
+using FrontierAcc =
+	ba::accumulator_set<double, ba::stats<ba::tag::mean, ba::tag::median, ba::tag::min, ba::tag::max>>;
+
 /** @brief Aggregate statistics about the last solved tile-dependency DAG. */
 struct DAGStats
 {
-	int tiles;	    // number of tiles (vertices)
-	int edges;	    // number of dependency edges
-	int levels;	    // number of longest-path levels (max_level + 1)
-	int maxFrontier; // largest level wavefront (size of the largest by_level bucket)
+	int tiles;		 // number of tiles (vertices)
+	int edges;		 // number of dependency edges
+	int levels;		 // number of longest-path levels (max_level + 1)
+	FrontierAcc frontier; // wavefront-width summary over the level buckets
 	DAGStats()
-		: tiles(0), edges(0), levels(0), maxFrontier(0)
+		: tiles(0), edges(0), levels(0)
 	{
 	}
 };
@@ -127,8 +139,7 @@ int solve_dag_topo(Graph &g, const std::vector<int> &weights, const std::vector<
 
 /**
  * @brief Return stats about the most recently solved DAG (tiles/edges/levels/frontier).
- *
- * Populated by knapsackdpdag() once per top-level call; safe to call from the
+ * * Populated by knapsackdpdag() once per top-level call; safe to call from the
  * single-threaded CLI benchmark.
  */
 DAGStats get_dag_stats();

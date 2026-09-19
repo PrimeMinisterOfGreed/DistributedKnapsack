@@ -150,6 +150,9 @@ PYBIND11_MODULE(libdistributed_knapsack, m)
 		.def_readonly("tiles", &DAGStats::tiles)
 		.def_readonly("edges", &DAGStats::edges)
 		.def_readonly("levels", &DAGStats::levels)
-		.def_readonly("maxFrontier", &DAGStats::maxFrontier);
+		.def_property_readonly("frontierMean", [](const DAGStats &s) { return ba::mean(s.frontier); })
+		.def_property_readonly("frontierMedian", [](const DAGStats &s) { return ba::median(s.frontier); })
+		.def_property_readonly("frontierMin", [](const DAGStats &s) { return ba::min(s.frontier); })
+		.def_property_readonly("frontierMax", [](const DAGStats &s) { return ba::max(s.frontier); });
 	m.def("get_dag_stats", &get_dag_stats);
 }
