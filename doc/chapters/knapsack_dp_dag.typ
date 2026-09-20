@@ -1,48 +1,6 @@
 #import "../functions/preamble.typ": *
 #import "kp_dp_algo.typ": *
 
-#show: style-algorithm
-= Knapsack DP Naive frontier
-
-La risoluzione classica dell'algoritmo dello zaino in versione dynamic programming è sostanzialmente l'applicazione del seguente algoritmo
-
-#KpDp
-
-Questo algoritmo ha una complessità di $O(N * C)$ dove C è la capacità dello zaino, la frontiera di esecuzione lungo cui è possibile parallelizzare è sostanzialmente la linea corrente di calcolo. A prima vista si potrebbe pensare che l'algoritmo non stia garantendo correttamente l'ordine di esecuzione, ad un ispezione più accurata invece si può notare che il calcolo di ogni linea $i$ ha come unica dipendenza che il calcolo sulla linea $i-1$ sia stato eseguito e che tutti gli esecutori abbiano terminato ogni operazione sulla linea $i-1$ rendendo di fatto possibile la sua esecuzione su EREW PRAM (Exclusive Read, Exclusive Write) visto che tutti gli accessi in lettura avvengono solo sulla linea precedente ad opera di un singolo esecutore e in scrittura solo sulla linea corrente, anche qui ad opera di un singolo esecutore.
-
-
-== Knapsack DP Naive frontier: implementazione
-
-L'implementazione più semplice di questo algoritmo è la seguente.
-
-#figure(
-  caption: "Knapsack dynamic programming Naive frontier",
-  kind: "listing",
-  supplement: none,
-  sourcecode[
-    ```cpp
-    int n = weights.size();
-    std::vector<std::vector<int>> dp(n + 1, std::vector<int>(capacity + 1, 0));
-    // Build the dp table
-    for (int i = 1; i <= n; ++i) {
-        #pragma omp parallel for
-        for (int w = 0; w <= capacity; ++w) {
-            if (weights[i - 1] <= w) {
-                dp[i][w] = std::max(dp[i - 1][w], dp[i - 1][w - weights[i - 1]] + values[i - 1]);
-            } else {
-                dp[i][w] = dp[i - 1][w];
-            }
-        }
-    }
-    ```
-  ],
-)
-
-Tuttavia quest'implementazione non offre nessun controllo sulla granularità dell'esecuzione, che si può invece ottenere raggruppando i blocchi di esecuzione sulla linea corrente (frontiera).
-
-== Knapsack DP Naive Frontier: Risultati
-
-
 = Knapsack DP DAG: Modello
 
 Un modello alternativo di esecuzione per questo algoritmo è pensare di creare un Directed Acyclic Graph che rappresenti la DP invece di usare una matrice. Per farlo si consideri la ricorrenza $"Dp"_i(w)=max("Dp"_(i-1)(w), "Dp"_(i-1)(w-w_i)+v_i)$, allora si può raggiungere uno stato $(i,w)$ da $(i-1,w)$ e da $(i-1,w-w_i)$, questo insieme di archi impone sostanzialmente l'ordine di esecuzione dell'algoritmo sulle diverse celle della DP e dipende solo da $w_i$. A questo punto si possono definire le frontiere di questo DAG, in modo semplice, come l'insieme degli stati che possono essere calcolati in parallelo, dato che non dipendono da altri stati, formalmente dati due stati $u,v in F$ allora $u arrow.not v and v arrow.not u$ che formano quindi una anti chain.

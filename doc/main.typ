@@ -7,20 +7,10 @@
   #v(1em)
 ]
 
-/*= Introduzione
-#include "chapters/introduzione.typ"
-= Soluzioni parallele al Knapsack 0/1
+= Sommario
+Il documento riassume due metodi di implementazione parallela dell'algoritmo dello zaino nella sua versione dynamic programming. La prima parte del documento contiene l'algoritmo nella sua versione classica e più accademica che lo risolve sulla frontiera di esecuzione naturale, cioè la singola linea della tabella; dopo un iniziale spiegazione dell'algoritmo segue la presentazione dei risultati. Nella seconda parte viene affrontato lo stesso algoritmo ma con un approccio diverso, per costruire le frontiere viene infatti utilizzato un Directed Acyclic Graph costituito da tile presi dalla tabella, questi tile vengono organizzati poi in frontiere denominate livelli di blocchi che possono essere eseguiti parallelamente. L'ultima parte, presentata come extra, affronta l'integrazione dell'algoritmo originale in versione CUDA per essere usato su schede grafiche NVIDIA.
 
-Le soluzioni a questo problema sono le più disparate e negli anni ne sono state scritte molte. In ambito aereospaziale il knapsack è usato sopratutto
-per lo scheduling di task operativi satellitari @surveymethods in particolare per l'osservazione terrestre @exactmethodphoto.
+#include "chapters/knapsack_dp_classic.typ"
 
-#include "chapters/knapsack_copa_decl.typ"
-= Implementazione dell'esperimento
-#include "chapters/implementazione.typ"
-= Risultati
-#include "chapters/risultati.typ"
-
-#bibliography("biblio.bib", title: none)*/
-
-
+#include "chapters/knapsack_dp_dag.typ"
 
