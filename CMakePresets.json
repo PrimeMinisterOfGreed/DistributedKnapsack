@@ -32,9 +32,18 @@
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++",
         "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_TIMERS": "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "KP_GPU": "OFF",
         "KP_MPI": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "GCC Release",
+      "inherits": "default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
@@ -50,7 +59,7 @@
     {
       "name": "gpu",
       "inherits": [
-        "default"
+        "release"
       ],
       "cacheVariables": {
         "KP_GPU": "ON",
@@ -65,14 +74,6 @@
       "cacheVariables": {
         "KP_GPU": "ON",
         "KP_MPI": "ON"
-      }
-    },
-    {
-      "name": "release-gcc",
-      "displayName": "GCC Release",
-      "inherits": "default",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
       }
     }
   ]

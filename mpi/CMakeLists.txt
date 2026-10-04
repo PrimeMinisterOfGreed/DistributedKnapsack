@@ -10,7 +10,7 @@ target_include_directories(${MPI_TARGET_NAME} PUBLIC
     ${Boost_INCLUDE_DIRS}
 )
 target_compile_options(${MPI_TARGET_NAME} PUBLIC ${OpenMP_CXX_FLAGS} ${Boost_COMPILE_OPTIONS})
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(ENABLE_TIMERS)
   target_compile_definitions(${MPI_TARGET_NAME} PUBLIC ENABLE_TIMERS=1)
 endif()
 target_link_libraries(${MPI_TARGET_NAME} PUBLIC

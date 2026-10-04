@@ -78,5 +78,14 @@ In questa implementazione si usa una Eigen matrix al posto di un vettore di vett
 
 == Knapsack DP Classic Frontier: Risultati
 
-Per confrontare i risultati bisogna tenere conto di 3 parametri del problema che ne modificano
+Per confrontare i risultati bisogna tenere conto di 3 parametri del problema che ne modificano profondamente il calcolo. Il primo è la capacità massima dello zaino, che cambia la dimensione della riga; il secondo è il range (e il seed di generazione) dei pesi, un peso grande richiede al processore di eseguire un salto più o meno grande, che potrebbe comportare un cache miss; l'ultimo è il numero di oggetti, che rende sostanzialmente la DP più o meno lunga, in questo caso comporta essenzialmente un incremento lineare del tempo, ma se si confrontano i tempi con la versione DAG che invece accorpa anche le linee è un parametro che è utile considerare.
+
+=== Ambiente di esecuzione
+L'algoritmo è stato fatto girare su una CPU Neoverse-N1, basata su architettura ARM, possiede 80 cores; una cache di primo livello di 5 MB e una cache di secondo livello di 80 MB. Il programma è stato compilato con GCC 14.2.0 e il preset Release di CMake , che automaticamente include -Os.
+
+// includi figura qui
+
+Come si può vedere dal grafico l'algoritmo scala abbastanza bene quando si aggiungono i primi threads per poi appiattirsi sempre di più. Questo comportamento è atteso poichè l'algoritmo è decisamente memory bound, analizzandolo rapidamente si può infatti notare che il ciclo principale comporta sostanzialmente qualche operazione di addizione e di comparazione che verrà risolta in qualche ciclo di clock, con invece aggregate delle operazioni di load e store che possono comportare ritardi anche molto grandi.
+
+
 

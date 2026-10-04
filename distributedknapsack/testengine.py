@@ -2,7 +2,7 @@ import sys
 import time
 import random
 import argparse
-import csv
+import json
 import os
 from abc import ABC, abstractmethod
 from typing import Dict, Tuple, Optional
@@ -16,6 +16,26 @@ from libdistributed_knapsack import (KnapsackArguments, KnapsackSolution, knapsa
 def ensure_mpi_initialized() -> None:
     if not MPI.Is_initialized():
         MPI.Init()
+
+
+def _env_int(name: str, fallback: int) -> int:
+    try:
+        return int(os.environ[name])
+    except (KeyError, ValueError):
+        return fallback
+
+
+def resolve_processors(test_name: str, test: "BenchmarkTest") -> int:
+    """Return the effective number of processors used by a test.
+
+    MPI tests use the communicator size, the GPU kernel uses KP_GPU_THREADS
+    while the OpenMP based CPU tests use OMP_NUM_THREADS.
+    """
+    if test.is_mpi_test:
+        return MPI.COMM_WORLD.size
+    if "gpu" in test_name:
+        return _env_int("KP_GPU_THREADS", test.numThreads)
+    return _env_int("OMP_NUM_THREADS", test.numThreads)
 
 
 class BenchmarkTest(ABC):
@@ -103,32 +123,71 @@ class TestRegister:
         for test in self._tests.values():
             test.setup(weights, values, self._capacity, numThreads)
 
-    def _append_result(self, test_name: str, test: BenchmarkTest, 
-                       duration: float, result: KnapsackSolution) -> None:
-        """Append test result to CSV file."""
+    def _append_result(self, test_name: str, test: BenchmarkTest,
+                       duration: float, result: KnapsackSolution,
+                       sections: dict, stats) -> None:
+        """Append test result (with time sections and DAG frontier stats) to JSON file."""
         if not self._save_file:
             return
-            
-        file_exists = os.path.exists(self._save_file)
-        
-        processors = MPI.COMM_WORLD.size if test.is_mpi_test else test.numThreads
+
+        processors = resolve_processors(test_name, test)
         test_type = "distributed memory" if test.is_mpi_test else "shared memory"
+        hostname = MPI.Get_processor_name() if test.is_mpi_test else os.uname().nodename
 
-        frontier_min = frontier_median = frontier_mean = frontier_max = 0
+        entry = {
+            'hostname': hostname,
+            'testname': test_name,
+            'testtype': test_type,
+            'time': float(duration),
+            'processors': processors,
+            'solution_weight': result.totalWeight,
+            'solution_profit': result.totalValue,
+            'capacity': self._capacity,
+            'num_items': test.numItems,
+            'min_weight': self._min_weight,
+            'max_weight': self._max_weight,
+            'seed': self._seed,
+            'time_sections': {
+                section_name: {
+                    'count': section.count,
+                    'mean': section.mean,
+                    'min': section.min,
+                    'max': section.max,
+                    'variance': section.variance,
+                }
+                for section_name, section in sections.items()
+            },
+        }
+
         if test.is_dag_test:
-            stats = get_dag_stats()
-            if stats.levels > 0:
-                frontier_min = stats.frontierMin
-                frontier_median = stats.frontierMedian
-                frontier_mean = stats.frontierMean
-                frontier_max = stats.frontierMax
+            entry['item_block'] = getattr(test, 'item_block', None)
+            entry['cap_block'] = getattr(test, 'cap_block', None)
 
-        with open(self._save_file, mode='a', newline='') as f:
-            writer = csv.writer(f)
-            hostname = MPI.Get_processor_name() if test.is_mpi_test else os.uname().nodename
-            if not file_exists:
-                writer.writerow(['hostname','testname', 'testtype', 'time', 'processors', 'solution_weight', 'solution_profit', 'capacity', 'num_items', 'min_weight', 'max_weight', 'seed', 'frontier_min', 'frontier_median', 'frontier_mean', 'frontier_max'])
-            writer.writerow([hostname, test_name, test_type, f"{duration:.4f}", processors, result.totalWeight, result.totalValue, self._capacity, test.numItems, self._min_weight, self._max_weight, self._seed, frontier_min, frontier_median, frontier_mean, frontier_max])
+        if test.is_dag_test and stats.levels > 0:
+            entry['frontier_distribution'] = {
+                'min': stats.frontierMin,
+                'median': stats.frontierMedian,
+                'mean': stats.frontierMean,
+                'max': stats.frontierMax,
+            }
+            entry['dag'] = {
+                'tiles': stats.tiles,
+                'edges': stats.edges,
+                'levels': stats.levels,
+            }
+
+        entries = []
+        if os.path.exists(self._save_file) and os.path.getsize(self._save_file) > 0:
+            try:
+                with open(self._save_file) as f:
+                    entries = json.load(f)
+            except (json.JSONDecodeError, ValueError):
+                entries = []
+
+        entries.append(entry)
+
+        with open(self._save_file, 'w') as f:
+            json.dump(entries, f, indent=2)
 
     def run(self, name: str = "all") -> None:
         if name == "all":
@@ -164,7 +223,7 @@ class TestRegister:
                           f"max={stats.frontierMax:.0f}")
 
             if self._save_file:
-                self._append_result(test_name, test, duration, result)
+                self._append_result(test_name, test, duration, result, sections, stats)
 
 
 

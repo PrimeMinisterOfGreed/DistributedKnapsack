@@ -37,8 +37,8 @@ if __name__ == "__main__":
     parser.add_argument("--maxWeight", type=int, default=50, help="Maximum weight")
     parser.add_argument("--minValue", type=int, default=1, help="Minimum value")
     parser.add_argument("--maxValue", type=int, default=50, help="Maximum value")
-    parser.add_argument("--save", type=str, default="results.csv", 
-                        help="Output CSV file for results (default: results.csv)")
+    parser.add_argument("--save", type=str, default="results.json", 
+                        help="Output JSON file for results (default: results.json)")
     parser.add_argument("--itemBlock", type=int, default=10, help="Item block size for knapsackdpdag (default: 10)")
     parser.add_argument("--capBlock", type=int, default=0, help="Capacity block size for knapsackdpdag (default: 0)")
     

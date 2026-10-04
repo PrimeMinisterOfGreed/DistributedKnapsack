@@ -29,3 +29,14 @@ class TimeSection:
 
 def get_section(name: str) -> TimeSection: ...
 def get_all_sections() -> dict[str, TimeSection]: ...
+
+class DAGStats:
+    tiles: int
+    edges: int
+    levels: int
+    frontierMin: float
+    frontierMedian: float
+    frontierMean: float
+    frontierMax: float
+
+def get_dag_stats() -> DAGStats: ...

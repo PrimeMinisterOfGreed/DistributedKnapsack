@@ -12,14 +12,15 @@ namespace
 {
 DAGStats g_last_dag_stats{};
 
-// A/B switch: use the topological scheduler by default; override with the
-// KNAPSACK_DAG_TOPO environment variable ("0" selects the levelized solver).
+// Solver switch: the levelized scheduler runs by default; set the
+// KNAPSACK_DAG_TOPO environment variable to a non-"0" value to opt into the
+// topological scheduler (still under investigation).
 bool use_topo_scheduler()
 {
 	static const bool topo = []() {
 		const char *env = std::getenv("KNAPSACK_DAG_TOPO");
 		if (env == nullptr)
-			return true;
+			return false;
 		return std::strcmp(env, "0") != 0;
 	}();
 	return topo;

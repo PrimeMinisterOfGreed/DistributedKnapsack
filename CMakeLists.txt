@@ -35,14 +35,13 @@ target_sources(distributed_knapsack PRIVATE
     TYPE CXX_MODULES
     FILES ${KP_MODULES}
 )
-
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(ENABLE_TIMERS)
   target_compile_definitions(distributed_knapsack PUBLIC ENABLE_TIMERS=1)
 endif()
 
 # Include directories
 target_include_directories(distributed_knapsack PUBLIC src include ${OpenMP_CXX_INCLUDE_DIRS} ${OpenMP_C_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS} ${fmt_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${spdlog_INCLUDE_DIRS})
-target_compile_options(distributed_knapsack PUBLIC ${OpenMP_CXX_FLAGS} ${OpenMP_C_FLAGS} ${Boost_COMPILE_OPTIONS})
+target_compile_options(distributed_knapsack PUBLIC ${OpenMP_CXX_FLAGS} ${OpenMP_C_FLAGS} ${Boost_COMPILE_OPTIONS} )
 # Link OpenMP libraries
 target_link_libraries(distributed_knapsack PUBLIC OpenMP::OpenMP_CXX OpenMP::OpenMP_C fmt::fmt spdlog::spdlog pybind11::pybind11 Eigen3::Eigen)
 
