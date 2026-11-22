@@ -1,5 +1,6 @@
 #include "Knapsack/knapsack.hpp"
 #include "Knapsack/knapsackdpdag_impl.hpp"
+#include "phases.hpp"
 #include "time.hpp"
 #include <argparse/argparse.hpp>
 #include <algorithm>
@@ -228,6 +229,20 @@ int main(int argc, char **argv)
 	fmt::print("{}: {:.4f}s | Items: {} | Profit: {} | Weight: {}\n", test, duration, numItems, solution.totalValue,
 			   solution.totalWeight);
 
+	// Coarse phases recorded by the solver (always on, see phases.hpp).
+	const auto phases = PhaseTimes::instance().get();
+	std::string phasesJson = "{";
+	for (std::size_t k = 0; k < phases.size(); ++k)
+		phasesJson += fmt::format("{}\"{}\": {}", k == 0 ? "" : ", ", phases[k].first, phases[k].second);
+	phasesJson += "}";
+	if (!phases.empty())
+	{
+		fmt::print("  phases:");
+		for (const auto &[name, sec] : phases)
+			fmt::print(" {}={:.4f}s", name, sec);
+		fmt::print("\n");
+	}
+
 	const auto sections = TimeSectionRegister::instance().get_all_sections();
 	if (!sections.empty())
 	{
@@ -285,9 +300,9 @@ int main(int argc, char **argv)
 	std::string entry = fmt::format(
 		"{{\"hostname\": \"{}\", \"testname\": \"{}\", \"testtype\": \"shared memory\", \"time\": {}, "
 		"\"processors\": {}, \"solution_weight\": {}, \"solution_profit\": {}, \"capacity\": {}, \"num_items\": {}, "
-		"\"min_weight\": {}, \"max_weight\": {}, \"seed\": {}, \"time_sections\": {}",
+		"\"min_weight\": {}, \"max_weight\": {}, \"seed\": {}, \"time_sections\": {}, \"phases\": {}",
 		json_escape(hostname), test, duration, processors, solution.totalWeight, solution.totalValue, capacity, numItems,
-		minWeight, maxWeight, seed, timeSections);
+		minWeight, maxWeight, seed, timeSections, phasesJson);
 
 	if (test == "knapsackdpdag")
 		fmt::format_to(std::back_inserter(entry), ", \"item_block\": {}, \"cap_block\": {}", itemBlock, capBlock);

@@ -60,6 +60,11 @@ SUMMARY_HEADER="max_weight,capacity,threads,tag,value,unit,event,runtime_ns,runt
 PERF_EVENTS="cycles,instructions,cache-references,cache-misses,branch-misses,L1-dcache-loads,L1-dcache-load-misses,ll_cache_rd,ll_cache_miss_rd,dTLB-load-misses,iTLB-load-misses"
 
 export LC_ALL=C
+
+# Pin the OpenMP threads (one per core, compact): without it threads migrate and
+# the timings of a memory-bound kernel depend on where the scheduler puts them.
+export OMP_PROC_BIND="${OMP_PROC_BIND:-close}"
+export OMP_PLACES="${OMP_PLACES:-cores}"
 mkdir -p "$OUT_DIR"
 rm -f "$SUMMARY"
 

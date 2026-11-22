@@ -17,7 +17,7 @@ Per funzionare, la procedura presuppone che i vertici all'interno del grafo sian
 
 #GenerateDAG
 
-Questa procedura è piuttosto generale e dipende fortemente da come si definisce formalmente il predecessore di una cella, nel caso del knapsack una cella può avere due predecessori $"DP"[i-1][w]$ in caso si decida di non prendere l'elemento è $"DP"[i-1][w-w_i]$ nel caso in cui invece si decida di prenderlo. Per un certo elemento $i$ e un certo range di capacità $(c,c+g)$ dove g rappresenta quante celle sulla linea si vogliono raggruppare nel tile i predecessori sono due range $"DP"[i-1][c-w_i...c-w_i+g]$ e $"DP"[i-1][c...c+g]$ che rappresentano le due casistiche, a questo punto per ordinare l'esecuzione dei tile basta controllare quale dei tile contiene il range e aggiungere un arco tra quel blocco e quello corrente, si noti che i vertici vengono aggiunti in ordine row-major, questo garantisce che l'ordinamento topologico sia rispettato senza dover ricorrere a un operazione di ordinamento topologico esplicita. L'assegnamento dei livelli avviene utilizzando questa definizione in modo analogo
+Questa procedura è piuttosto generale e dipende fortemente da come si definisce formalmente il predecessore di una cella, nel caso del knapsack una cella può avere due predecessori: $"DP"[i-1][w]$ in caso si decida di non prendere l'elemento e $"DP"[i-1][w-w_i]$ nel caso in cui invece si decida di prenderlo. Per un certo elemento $i$ e un certo range di capacità $(c,c+g)$ dove g rappresenta quante celle sulla linea si vogliono raggruppare nel tile i predecessori sono due range $"DP"[i-1][c-w_i...c-w_i+g]$ e $"DP"[i-1][c...c+g]$ che rappresentano le due casistiche, a questo punto per ordinare l'esecuzione dei tile basta controllare quale dei tile contiene il range e aggiungere un arco tra quel blocco e quello corrente, si noti che i vertici vengono aggiunti in ordine row-major, questo garantisce che l'ordinamento topologico sia rispettato senza dover ricorrere a un operazione di ordinamento topologico esplicita. L'assegnamento dei livelli avviene utilizzando questa definizione in modo analogo
 #AssignLevels
 
 
@@ -30,7 +30,7 @@ Per ogni tile si procede con il consueto calcolo sulla DP e si ricava il risulta
 
 == Knapsack DP DAG: implementazione
 
-L'implementazione mantiene una corrispondenza quasi biunivoca con il modello: i tile sono i vertici di un grafo `boost::adjacency_list` bidirezionale e ogni vertice porta appeso un `NodeData` che descrive il sottoblocco della tabella di sua competenza. Il tiling è parametrizzato da `item_block` e `cap_block`, che accorpano rispettivamente le righe (gli item) e le colonne (le capacità) della DP: la griglia ha $n_b = ceil(n\/"item"_b)$ blocchi di item e $n_q = ceil((C+1)\/"cap"_b)$ blocchi di capacità, e poiché i vertici vengono inseriti in ordine row-major il descrittore del tile $(b, q)$ è semplicemente $b dot n_q + q$. Il blocco DP è una matrice Eigen row-major con una riga in più rispetto agli item locali del tile: la riga 0 non viene calcolata ma ereditata dal tile sopra (riga di confine), mentre per ogni item locale `dep_ranges` registra l'intervallo di capacità letto nel caso "take", cioè il range del tile shiftato di $w_i$.
+Nell'implementazione i tile sono i vertici di un grafo `boost::adjacency_list` bidirezionale e ogni vertice porta appeso un `NodeData` che descrive il sottoblocco della tabella di sua competenza. Il tiling è parametrizzato da `item_block` e `cap_block`, che accorpano rispettivamente le righe (gli item) e le colonne (le capacità) della DP: la griglia ha $n_b = ceil(n\/"item"_b)$ blocchi di item e $n_q = ceil((C+1)\/"cap"_b)$ blocchi di capacità, e poiché i vertici vengono inseriti in ordine row-major il descrittore del tile $(b, q)$ è semplicemente $b dot n_q + q$. Il blocco DP è una matrice Eigen row-major con una riga in più rispetto agli item locali del tile: la riga 0 non viene calcolata ma ereditata dal tile sopra (riga di confine), mentre per ogni item locale `dep_ranges` registra l'intervallo di capacità letto nel caso "take", cioè il range del tile shiftato di $w_i$.
 
 #figure(
   caption: "Knapsack DP DAG: strutture dati del grafo",
@@ -56,9 +56,11 @@ L'implementazione mantiene una corrispondenza quasi biunivoca con il modello: i 
   ],
 )
 
-La costruzione del grafo (`build_graph`) procede in due passaggi. Nel primo vengono creati tutti i vertici in ordine row-major, allocando per ciascuno il blocco e calcolando gli intervalli di dipendenza descritti sopra. Nel secondo si aggiungono gli archi: oltre all'arco col tile direttamente sopra $(b-1, q)$, che copre la dipendenza del caso "skip" ($"DP"[i-1][w]$), per ogni item locale con intervallo non vuoto si aggiungono archi dai blocchi di capacità che intersecano l'intervallo shiftato, sia sulla riga di tile sopra sia sulla stessa riga a sinistra: sono i predecessori del caso "take" ($"DP"[i-1][w - w_i]$, che può trovarsi nel tile sopra o in uno a sinistra della stessa riga). Ogni arco codifica esattamente la regola dell'algoritmo :"se un predecessore di una cella del tile vive in un altro tile", il tile dipende da quel tile" e l'inserimento row-major dei vertici garantisce l'ordinamento topologico senza alcuna operazione esplicita, come richiesto dalla procedura.
 
-L'assegnamento dei livelli (`compute_levels`) è un singolo passaggio sui vertici in ordine row-major: quando un tile viene visitato tutti i suoi predecessori hanno descrittore minore per cui il livello è già assegnato. La risoluzione (`solve_dag`) smista i tile in livelli ed esegue le frontiere una dopo l'altra, con parallelismo interno al livello:
+
+La costruzione del grafo avviene in due passaggi: prima si creano tutti i vertici, in modo che siano in ordine row-major calcolando gli intervalli di dipendenza al loro interno, successivamente si aggiungono gli archi, per farlo si prende un arco col tile direttamente sopra $(b-1,q)$ che rappresenta il caso "skip", poi per ogni item locale si aggiungono archi dai blocchi di capacità che intersecano l'intervallo spostato di $w_i$ , che può trovarsi o nella riga di tile sopra oppure a sinistra della stessa riga. L'intervallo di dipendenza di un item locale è l'intervallo di capacità che il caso "take" legge nella riga precedente: per ogni $w$ dell'intervallo del tile si legge $"DP"[i-1][w - w_i]$, quindi l'intervallo è quello del tile shiftato di $-w_i$ e troncato al dominio di capacità $[0, C]$, e viene marcato vuoto quando l'item non entra mai nell'intervallo del tile. Ogni arco rappresenta la regola: "se un predecessore di una cella del tile vive in un altro tile, il tile dipende da quel tile"; l'inserimento row-major dei vertici garantisce l'ordinamento topologico senza alcuna operazione esplicita, come richiesto dalla procedura.
+
+L'assegnamento dei livelli (`compute_levels`) è un singolo passaggio sui vertici: quando un tile viene visitato tutti i suoi predecessori hanno descrittore minore per cui il livello è già assegnato. La risoluzione (`solve_dag`) smista i tile in livelli ed esegue le frontiere una dopo l'altra, con parallelismo interno al livello.
 
 #figure(
   caption: "Knapsack DP DAG: esecuzione a frontiere",
@@ -90,7 +92,7 @@ L'assegnamento dei livelli (`compute_levels`) è un singolo passaggio sui vertic
 
 La barriera implicita a fine `parallel for` realizza esattamente la semantica di $"Ready"(C)$ del modello: un tile del livello $L+1$ non comincia prima che tutti quelli del livello $L$ abbiano scritto il proprio blocco. Il valore ottimo si legge infine nell'angolo in basso a destra dell'ultimo tile, `block(rows - 1, capacity - lo)`.
 
-Il calcolo di un singolo tile (`compute_tile`) è la ricorrenza classica confinata al sottoblocco. La riga 0 viene copiata dal tile sopra: per ogni capacità $w$ dell'intervallo si risale al tile proprietario ($q' = w\/"cap"_b$, colonna $w - q' dot "cap"_b$) e se ne legge l'ultima riga, oppure si scrivono zeri se $b = 0$. Le righe interne applicano il solito massimo fra il caso "skip" (riga precedente, stessa cella: lettura sempre interna) e il caso "take" (cella $w - w_i$): se $w - w_i >= "lo"$ la lettura resta nel tile, altrimenti va nel tile a sinistra della stessa riga.
+Il calcolo di un singolo tile (`compute_tile`) è la ricorrenza classica confinata al sottoblocco. La riga 0 viene copiata dal tile sopra: per ogni capacità $w$ dell'intervallo si risale al tile proprietario ($q' = w\/"cap"_b$, colonna $w - q' dot "cap"_b$) e se ne legge l'ultima riga, oppure si scrivono zeri se $b = 0$. Le righe interne dividono la riga in tre intervalli contigui: prima che l'item entri ($"lo" + c < w_i$, copia della riga sopra), poi il caso "take" con sorgente $w - w_i$ in un tile a sinistra della stessa riga, infine il caso "take" con sorgente interna al tile, che è lo stesso kernel branch-free a puntatori delle altre varianti: i due estremi degli intervalli ($"lo" + c = w_i$ e $w - w_i = "lo"$) si calcolano una volta per riga, fuori dal ciclo caldo.
 
 La funzione di alto livello `knapsackdpdag` incolla le fasi: costruzione del grafo, risoluzione, ricostruzione della soluzione e al termine registra in `DAGStats` il numero di tile ($n_b dot n_q$), di archi e di livelli, insieme alla larghezza delle frontiere (tile per livello, riassunta con media, mediana, minimo e massimo): sono le statistiche riportate in @tab:dag-frontiers nella sezione dei risultati.
 
@@ -98,38 +100,31 @@ La funzione di alto livello `knapsackdpdag` incolla le fasi: costruzione del gra
 
 === Esecuzione dell'esperimento
 
-Le misure condividono l'ambiente del capitolo precedente (nodo ARM Neoverse-N1 del cluster mercurio, `kpbench` compilato con GCC 14.2.0 in preset Release, misure `perf stat` ). Questo consente un confronto diretto fra le due versioni: tempi e contatori provengono dalla stessa campagna.
+Le misure condividono l'ambiente del capitolo precedente (nodo ARM Neoverse-N1 del cluster mercurio, `kpbench` compilato con GCC 14.2.0 in preset Release, misure `perf stat`). Questo consente un confronto diretto fra le due versioni: tempi e contatori provengono dalla stessa campagna. In fase di comparazione non si usa il wall per comparare le soluzioni ma la sola fase di compute, questo perchè il DAG paga un tempo addizionale in termini di costruzione del grafo e di deallocazione dello stesso che la soluzione DP non ha. Costo che non dovrebbe essere pagato se per esempio si riciclasse il grafo cambiando solo i profitti e non i pesi degli elementi.
 
 === Scalabilità e crossover
 
-#figure(
-  image("../images/perf_kpdpdag_speedup.png", width: 100%),
-  caption: [Speedup del KnapsackDPDAG a $n = 50$ per famiglia di peso e capacity.],
-) <fig:dag-speedup-cap>
 
-A $n = 50$ lo sweep sulla capacity mostra uno speedup a muro che si ferma nell'ordine di $2.2 - 2.4 times$ qualunque siano famiglia di peso e capacity, e l'*insn ratio* a 32 thread sale a $4.4 times$: quasi un quarto delle istruzioni eseguite in parallelo è spinning su code e atomiche. Il collo non dipende dunque dalla taglia del problema ma dal rapporto fra lavoro per tile e costo di sincronizzazione su frontiere strette.
 
 #figure(
   image("../images/perf_kpdpdag_speedup_vs_n.png", width: 100%),
-  caption: [Speedup del KnapsackDPDAG al variare di thread e numero di oggetti (capacity $10^6$, granularità tile migliore per punto, mediana su 2 repliche).],
+  caption: [Speedup della fase compute del KnapsackDPDAG al variare di thread e numero di oggetti (capacity $10^6$, granularità tile migliore per punto, mediana su 3 repliche).],
 ) <fig:dag-speedup>
 
-Tenendo invece fissata la capacity e variando il numero di oggetti il quadro cambia radicalmente. La campagna di @fig:dag-speedup ripete lo sweep sui thread per $n in {50, 250, 1000, 5000}$ a capacity $10^6$, scegliendo per ogni punto la migliore fra quattro granularità ($"item"_b in {5, 25}$, $"cap"_b in {10^3, 10^4}$): a $n = 50$ lo speedup si ferma a $approx 2.7 times$, cresce già a $approx 6.1 times$ con $n = 250$ e raggiunge $approx 8.1 - 8.4 times$ per $n >= 1000$. La griglia include anche granularità con frontiere più larghe ($"cap"_b = 10^3$: $n_q = 1001$ blocchi di capacità invece di $101$, picco di frontiera $approx 1000$ tile invece di $approx 101$): a parità di $"item"_b$ aggiungono parallelismo esposto ma non vincono mai nel regime parallelo; a $n = 5000$ e 32 thread $(5, 10^3)$ impiega $approx 5.1 s$ contro $approx 1.9 s$ di $(5, 10^4)$. La ragione è che la frontiera stretta copre già i 32 thread ($approx 101$ tile di picco): la larghezza in più non espone lavoro aggiuntivo, mentre frammenta lo stesso calcolo in $10 times$ più tile, ognuno con $10 times$ meno lavoro utile e gli stessi costi fissi di schedulazione e copia della riga di confine, e raddoppia i livelli ($2000$ contro $1100$).
+La @tab:dag-campaigns riassume la configurazione della campagna di @fig:dag-speedup.
 
 #figure(
   table(
-    columns: 6,
-    [$n$], [$T_"dag"(1)$], [$T_"plain"(1)$], [vantaggio seriale], [$S_"wall"$ DAG $p=32$], [insn ratio DAG $p=32$],
-    [50], [0.16 s], [0.64 s], [$4.0 times$], [$2.4 times$], [$4.4 times$],
-    [1000], [3.41 s], [23.1 s], [$6.8 times$], [$7.1 times$], [$1.35 times$],
-    [5000], [15.9 s], [150 s], [$9.4 times$], [$9.1 times$], [$1.25 times$],
+    columns: 5,
+    [$n$], [$C$], [$W_"max"$], [$"item"_b$ × $"cap"_b$], [thread (repliche)],
+    [50], [$10^6$], [10], [(25, 10³) a 2-4-32 t, (10, 10³) a 8 t, (25, 10⁴) a 1 t], [1, 2, 4, 8, 16, 32 (3)],
+    [1000], [$10^6$], [10], [(25, 10³) a 1-8 t, (10, 10⁴) a 16-32 t], [1, 4, 8, 16, 32 (3)],
+    [5000], [$10^6$], [10], [(25, 10³) a 1 t, (25, 10⁴) a 4-32 t], [1, 4, 8, 16, 32 (3)],
   ),
-  caption: [Crossover dello scaling: stesso problema, stessa capacity, numero di oggetti crescente (2 repliche, spread $<= 1.03$).],
-) <tab:dag-crossover>
+  caption: [Configurazione della campagna compute: geometria migliore per punto (selezionata dalle campagne di wall), mediana su 3 repliche.],
+) <tab:dag-campaigns>
 
-
-
-Il limite di scala ha anche una spiegazione strutturale: il parallelismo effettivamente esposto dal DAG dipende dalla distribuzione delle frontiere sui livelli. La geometria del DAG è governata da due parametri di tiling: `item_block` ($"item"_b$ nelle tabelle) è il numero di oggetti, cioè di righe della DP, accorpati in un singolo tile, `cap_block` ($"cap"_b$) è il numero di colonne di capacità per tile; la griglia risulta così composta da $n_b = ceil(n\/"item"_b)$ blocchi di item e $n_q = ceil((C+1)\/"cap"_b)$ blocchi di capacità, per un totale di $n_b dot n_q$ tile, ciascuno responsabile del calcolo di un sottoblocco $"item"_b times "cap"_b$ della tabella. Blocchi grandi riducono il numero di tile e con esso l'overhead di schedulazione e l'indirezione cross-tile, ma stringono le frontiere (meno tile indipendenti per livello); blocchi piccoli fanno il contrario, esponendo più parallelismo a costo di più sincronizzazioni. Il solver riporta le statistiche delle frontiere (larghezza = numero di tile per livello) per ogni esecuzione; la tabella seguente le riassume per alcune configurazioni,
+La campagna riassunta in @tab:dag-campaigns fissa la capacity e varia il numero di oggetti. A $n = 50$ nemmeno la fase di compute trae vantaggio da 32 esecutori: la frontiera , che hanno al massimo 2 tile per livello, non permettono di aumentare il parallelismo a un livello sufficiente. Il limite si allenta col numero di oggetti, dove il compute scala quasi idealmente; i wall della stessa configurazione crescono però molto meno, diluiti da first touch e teardown (@tab:dag-phases), che a taglia grande coprono da soli la maggior parte del wall.
 
 #figure(
   table(
@@ -157,36 +152,93 @@ Il limite di scala ha anche una spiegazione strutturale: il parallelismo effetti
   caption: [Statistiche delle frontiere del DAG (larghezza = tile per livello)],
 ) <tab:dag-frontiers>
 
-La struttura del grafo rende la distribuzione deterministica: oltre all'arco col tile sopra $(b-1, q)$, il range di dipendenza shiftato di $w_i$ crea sistematicamente un arco col tile alla sua sinistra $(b, q-1)$, quindi il livello di un tile è $"level"(b,q) = b+q$ e le frontiere sono le anti-diagonali della griglia di tile. Ne segue che i livelli sono $n_b + n_q - 1$, il picco di larghezza è $min(n_b, n_q)$ e la media $n_b n_q\/(n_b+n_q-1)$: tutti i valori misurati in @tab:dag-frontiers coincidono con queste formule. La relazione presuppone pesi $w_i >= 1$ e $"maxWeight" <= "cap"_b$: con pesi nulli, o pesi tali da scavalcare più blocchi di capacità, la struttura delle dipendenze sarebbe diversa, pur restando valido l'ordinamento topologico row-major. La conseguenza è che a $n = 50$ il picco di parallelismo esposto è solo $n_b = ceil(n\/"item"_b)$, cioè fra 2 e 10 tile per livello a seconda della granularità: con 32 esecutori la maggior parte resta ferma a ogni frontiera, e questo è il vero limite di scaling della versione DAG a pochi oggetti. Il valore cresce con $n$ (a $n = 1000$ il picco arriva a 101 tile, oltre il numero di thread) e spiega perché le curve di speedup di @fig:dag-speedup si innalzino col numero di oggetti, in accordo con i valori di @tab:dag-crossover, così come la regola empirica della granularità (più thread richiedono `item_block` più piccolo, cioè più livelli e frontiere più larghe, fino alla saturazione a $n_q$ discussa sopra).
+Cambiando invece la geometria dei tile si può notare invece che anche la fase di compute guadagna dal maggior numero di thread (linea verde della @fig:dag-speedup), in tabella @tab:dag-frontiers si può notare come variando opportunamente la geometria dei tile il parallelismo interno ai livelli aumenti considerevolmente. Inoltre la struttura del grafo rende la distribuzione deterministica: oltre all'arco col tile sopra $(b-1, q)$, il range di dipendenza shiftato di $w_i$ crea sistematicamente un arco col tile alla sua sinistra $(b, q-1)$, quindi il livello di un tile è $"level"(b,q) = b+q$ . Ne segue che i livelli sono $n_b + n_q - 1$, il picco di larghezza è $min(n_b, n_q)$ e la media $n_b n_q\/(n_b+n_q-1)$.
+
+
+
+#figure(
+  table(
+    columns: 10,
+    [$n$],
+    [$W_"max"$],
+    [$"item"_b$],
+    [$"cap"_b$],
+    [thread],
+    [wall (ms)],
+    [graph build (ms)],
+    [first touch (ms)],
+    [compute (ms)],
+    [teardown (ms)],
+
+    [50], [10], [25], [$10^4$], [1], [98.1], [0.3], [65.0], [12.7], [20.2],
+    [50], [10], [25], [$10^3$], [32], [44.2], [3.1], [8.2], [13.3], [19.5],
+    [1000], [10], [10], [$10^4$], [32], [464.8], [14.1], [134.4], [42.6], [273.0],
+    [5000], [10], [25], [$10^4$], [32], [2050.1], [38.5], [621.9], [193.2], [1194.6],
+  ),
+  caption: [Fasi del solver DAG su 4 configurazioni (mediana di 3, geometria migliore per punto): a $n >= 1000$ il teardown copre da solo oltre metà del wall a 32 thread.],
+) <tab:dag-phases>
+
+
+Il peso delle fasi non compute è comunque strettamente correlato al numero di tile, la costruzione che è seriale per natura fa si che il costo cresca linearmente con il numero di tile, costo che potrebbe essere evitato se il calcolo riutilizzasse il grafo variando per esempio solo i profitti e mantenendo inalterati i pesi. La riga delle fasi di @fig:dag-block-grid mostra però il teardown come eccezione: resta quasi costante al variare della granularità, perché la memoria da liberare (la tabella DP) non dipende dalla forma dei tile; il suo peso nasce dall'anti-scaling: i blocchi nascono in arena separate dell'allocator e risultano sparsi in memoria, quindi la liberazione si esegue quasi tutta su un solo core, nel percorso di free del kernel. Confinare l'allocator a un'arena sola riporterebbe il teardown al costo seriale, ma renderebbe il first touch molto più lento, privo delle transparent huge pages.
+
+
+
+
+
+// aggiungi forse un grafico sul wall
+
+
 
 === L'effetto del tiling sulla località
 
 #figure(
   image("../images/perf_vs_algorithms.png", width: 100%),
-  caption: [Confronto KnapsackDP classico e KnapsackDPDAG a capacity $10^6$: IPC, cicli per cella e LLC MPKI.],
+  caption: [Confronto KnapsackDP classico e KnapsackDPDAG a capacity $10^6$ e $n=50$],
 ) <fig:dag-vs-classic>
 
-Il guadagno principale del tiling è sulla gerarchia di memoria. In seriale a capacity $10^6$ la versione DAG raggiunge un IPC di $2.2 - 2.3$ contro $approx 0.64$ del classico, con $approx 4$ miss LLC per 1000 istruzioni contro $approx 97$: le miss totali crollano da $121 times 10^6$ a $5 times 10^6$ ($24 times$ in meno) a parità di istruzioni eseguite ($approx 1.2 times 10^9$ per entrambe). Il costo per cella scende da $approx 38 - 40$ a $approx 11$ cicli: il tile mantiene il proprio working set in cache e la riga di confine del tile superiore resta residente.
+La @fig:dag-vs-classic confronta i contatori hardware dei due algoritmi sull'intero processo, a parità di istanza ($n = 50$, capacity $10^6$) e per entrambe le famiglie di peso. In seriale i due profili sono simili: il DAG mostra un IPC leggermente più basso del classico e un numero di cicli per cella più alto, mentre le miss di ultimo livello per istruzione restano confrontabili fra i due. Al crescere dei thread i comportamenti divergono: l'IPC del classico crolla progressivamente, scendendo a circa $0.25$ a 32 thread, e i cicli per cella crescono di oltre un ordine di grandezza rispetto al seriale, mentre il DAG mantiene un IPC elevato — nella famiglia $W_"max" = 10$ cresce fino a circa $2.3$ — e i suoi cicli per cella aumentano in modo molto più contenuto. Anche il rapporto fra le miss di ultimo livello si rovescia: a 8 thread le miss per istruzione scendono per entrambi gli algoritmi, ma a 32 thread quelle del classico risalgono verso i $9$-$10$ MPKI mentre quelle del DAG scendono a circa $2$. Il fenomeno non dipende dalla famiglia di peso: le due righe della figura presentano la stessa dinamica, con il vantaggio del DAG sui contatori che emerge solo nel regime parallelo.
 
-Il vantaggio seriale è $approx 4 times$ (0.16 s contro 0.64 s) e *cresce* con il numero di oggetti: il costo per cella del classico degrada da 12.6 a 30.0 ns/cella passando da $n = 50$ a $n = 5000$ (la tabella, da 4 a 20 GB, peggiora cache e TLB), mentre quello del DAG resta piatto a $approx 3.2 - 3.4$ ns/cella: a $n = 5000$ il vantaggio seriale arriva a $9.4 times$.
 
 === La granularità dei tile
 
 #figure(
   image("../images/perf_kpdpdag_block_grid.png", width: 100%),
-  caption: [Effetto di item_block e cap_block su tempo, IPC e LLC MPKI (maxWeight=10, $n = 5000$, capacity $10^6$, 32 thread).],
+  caption: [Effetto di item_block e cap_block a $n = 5000$, capacity $10^6$, 32 thread. Sopra: wall, IPC e LLC MPKI. Sotto: tempi di first touch, compute e teardown (mediana di 3, scala logaritmica condivisa fra i pannelli).],
 ) <fig:dag-block-grid>
 
-La scelta della granularità governa il compromesso fra parallelismo esposto e overhead di schedulazione. Con pochi oggetti ($n = 50$) vince la granularità grossa a thread bassi: `item_block` = 25 è ottimo a 1--2 thread, 15 a 4, 10 a 8 e 5 oltre i 16 thread (più thread richiedono più tile indipendenti). @fig:dag-block-grid ripete il confronto alla taglia opposta, $n = 5000$, capacity $10^6$ e 32 thread: vince ($"item"_b = 10$, $"cap"_b = 10^4$) con $1.75 s$; `item_block` = 25 realizza l'IPC più alto ($1.67$ contro $1.43$, meno sincronizzazioni per item) ma lascia frontiere mediamente più corte ($approx 67$ contro $84$ tile) e perde in tempo ($2.07 s$); `cap_block` = $10^3$ moltiplica per dieci il numero di tile senza alcun guadagno di località (l'LLC MPKI non scende mai sotto $3.2$) e costa fino a $approx 2.2 times$ in tempo. Il `cap_block` grande ($10^4$) resta quindi preferibile a capacity $10^6$ con molti thread, così come per maxWeight $= 1000$.
-
-
+La @fig:dag-block-grid mostra come la geometria dei tile incida sulle fasi del solver a $n = 5000$ e 32 thread. Il primo aspetto evidente è che il wall time non è dominato dal calcolo: la fase di compute occupa solo $170$-$210$ ms, meno di un decimo del wall, mentre first touch e teardown assorbono insieme la grande maggioranza del tempo, con il teardown che pesa da solo per circa metà del wall. Il secondo aspetto è che queste fasi reagiscono in modo diverso alla granularità: il teardown resta quasi costante in tutte le configurazioni ($1.2$-$1.4$ s), confermando che la memoria da liberare dipende dalla tabella DP e non dalla forma dei tile. Il compute varia poco e non in modo monotono: il minimo si ottiene a $(25, 10^3)$, ma la configurazione con il wall migliore è $(25, 10^4)$, segno che a questa taglia la scelta della geometria premia le fasi di sistema più che il kernel. Coerentemente, i contatori cambiano poco fra le quattro configurazioni : l'IPC resta compreso fra $1.32$ e $1.42$ e le miss di ultimo livello fra $10.4$ e $11.9$ MPKI , ad indicare che il tiling agisce soprattutto sul costo della gestione della memoria, senza alterare in modo marcato il comportamento del processore durante il calcolo.
 
 == Confronto tra la versione classica e la versione DAG
 
 #figure(
   image("../images/perf_big_crossover.png", width: 100%),
-  caption: [Speedup del DAG sul classico $T_"plain"\/T_"dag"$ in tempo assoluto a capacity $10^6$, per numero di oggetti crescente: sempre sopra 1; il DAG è più veloce a ogni thread count, con vantaggio massimo in seriale.],
+  caption: [Tempi di compute $T_"plain"\/T_"dag"$ a capacity $10^6$ ($> 1$: DAG più veloce).],
 ) <fig:kpdp-perf-crossover>
 
-A capacity $10^6$ la versione DAG è più veloce del classico a tutti i thread count, come mostra @fig:kpdp-perf-crossover: lo speedup del DAG sul classico passa da $4.0 times$ a $p = 1$ a $1.28 times$ a $p = 32$ per $n = 50$, e da $9.4 times$ a $5.8 times$ per $n = 5000$. Il vantaggio è massimo in seriale, dove coincide con il rapporto fra i tempi seriali, e si comprime al crescere dei thread, perché il limite di sincronizzazione del DAG appiattisce la sua curva mentre il classico continua a scalare. La ragione è strutturale: il classico è memory-bound per costruzione ($approx 97$ LLC MPKI, hit $approx 0%$, IPC $approx 0.6$), e aggiungere thread non cura il problema perché i thread extra aggiungono contesa, non località ($K_c$ che cresce di $4 times$, insn ratio $+33%$, entrambi a capacity $10^6$). Il tiling attacca la causa e riduce il traffico DRAM di $approx 17 times$ (33 GB contro 569 GB di letture stimate a $n = 5000$, $p = 32$).
+Nella sola fase di *compute*, la @fig:kpdp-perf-crossover mostra che a $n = 50$ il DAG è più rapido soltanto in seriale ($1.18 times$): all'aumentare dei thread il rapporto scende fino a $0.18$ a 32 thread, poiché la frontiera contiene al massimo due tile e il kernel usa effettivamente due thread. Per $n = 1000$ e $n = 5000$ il classico resta più veloce nel calcolo, ma il DAG riduce lo svantaggio, arrivando rispettivamente a $0.78$ e $0.84$ a 32 thread grazie alle frontiere più ampie. Il risultato si ribalta nella @fig:dag-crossover-wall, dove il tempo comprende anche la costruzione del grafo, il first touch e il teardown: per $n >= 1000$ a 32 thread il minor costo complessivo delle fasi fuori dal compute compensa il kernel ancora più lento, portando il rapporto del wall sopra 1. A $n = 50$, invece, il rapporto resta sotto 1 perché prevale il forte svantaggio del compute.
 
+#figure(
+  table(
+    columns: 5,
+    [$n$], [$T_"comp"$ plain(1)], [$T_"comp"$ dag(1)], [$T_"comp"(1)$ plain\/DAG], [$T_"comp"(32)$ plain\/DAG],
+
+    [50], [15.0 ms], [12.7 ms], [$1.18 times$], [$0.18 times$],
+    [1000], [298 ms], [428 ms], [$0.69 times$], [$0.78 times$],
+    [5000], [1.49 s], [2.18 s], [$0.68 times$], [$0.84 times$],
+  ),
+  caption: [Crossover della fase compute: tempi seriali della fase compute e rapporto fra i compute dei due solver in seriale e a 32 thread.],
+) <tab:dag-crossover>
+
+#figure(
+  image("../images/perf_big_crossover_wall.png", width: 100%),
+  caption: [Tempi di wall $T_"plain"\/T_"dag"$ a capacity $10^6$ ($> 1$: DAG più veloce).],
+) <fig:dag-crossover-wall>
+
+Nel confronto sui tempi di wall, mostrato nella @fig:dag-crossover-wall, il quadro cambia rispetto al solo compute. A $n = 50$ il classico rimane più veloce a ogni numero di thread, sebbene il divario si riduca fino a un rapporto di circa $0.68$ a 32 thread. Per $n = 1000$ e $n = 5000$, invece, il DAG recupera progressivamente lo svantaggio seriale e supera il classico a 32 thread, con rapporti rispettivamente di circa $1.20$ e $1.40$. Il vantaggio del DAG sul tempo complessivo compare quindi solo a taglia grande e con parallelismo elevato, mentre il classico resta più rapido in seriale e, considerando il solo kernel, anche a 32 thread.
+
+#figure(
+  image("../images/perf_big_comparison.png", width: 100%),
+  caption: [Confronto KnapsackDP classico e KnapsackDPDAG (geometria migliore per punto) su $n = 5000$, capacity $10^6$, maxWeight $10$ ],
+) <fig:dag-big-comparison>
+
+La @fig:dag-big-comparison, relativa a $n = 5000$, mostra come i contatori hardware dei due algoritmi evolvano all'aumentare dei thread. In seriale il DAG presenta un IPC leggermente inferiore e molti più cicli per cella rispetto al classico, coerentemente con il suo maggiore tempo di compute. Parallelizzando, i comportamenti si separano nettamente: per il classico l'IPC scende da circa $1.8$ a $0.26$ a 32 thread, mentre i cicli per cella crescono da meno di $2$ a oltre $50$; per il DAG l'IPC resta elevato, circa $1.36$ a 32 thread, e i cicli per cella aumentano solo da circa $7$ a $9$, restando oltre cinque volte inferiori a quelli del classico a parità di thread. Le miss di ultimo livello per istruzione mostrano invece un andamento diverso: il DAG parte con meno MPKI in seriale, ma a 16 e 32 thread è il classico a registrarne meno, mentre i valori del DAG diminuiscono solo lievemente. Poiché i contatori riguardano l'intero processo e non il solo kernel, questo non contraddice il fatto che a 32 thread il classico resti più rapido nel compute, pur risultando più lento sul wall.

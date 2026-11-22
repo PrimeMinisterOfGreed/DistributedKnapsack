@@ -129,6 +129,8 @@ PERF_DIR = BASE_DIR / "data" / "perf"
 KPDP_PERF_FILE = PERF_DIR / "perf_kpdp.csv"
 DAG_PERF_FILE = PERF_DIR / "perf_kpdpdag.csv"
 BIG_PERF_FILE = PERF_DIR / "perf_kpdpbig.csv"
+PHASES_DAG_FILE = PERF_DIR / "phases_kpdpdag_compute.csv"
+PHASES_KPDP_FILE = PERF_DIR / "phases_kpdp_compute.csv"
 OUT_DIR = BASE_DIR / "images"
 
 NUM_ITEMS = 50  # every benchmark run uses num_items=50 (see sbatch scripts)
@@ -701,52 +703,46 @@ def print_big_tables(best_big: pd.DataFrame, plain_big: pd.DataFrame) -> None:
 
 
 def plot_big_crossover(
-    kpdp: pd.DataFrame,
-    best_small: pd.DataFrame,
-    plain_big: pd.DataFrame,
-    best_big: pd.DataFrame,
+    phases_c: pd.DataFrame,
+    phases_d: pd.DataFrame,
     out: Path,
 ) -> None:
-    """DAG speedup over the classic, T_plain/T_dag at the same p, one panel
-    per num_items (50 from the n=50 sweep), linear scale.
+    """DAG speedup over the classic on the compute phase, one panel per
+    num_items, linear scale.
 
-    Every point is above 1: the DAG wins in wall time at every thread
-    count.  The advantage is largest serially (4-9x, the serial-time
-    ratio) and shrinks toward p=32 (1.3-5.8x) because the DAG's
-    synchronization limit flattens its curve while the classic keeps
-    scaling.
+    Ratio of median compute times T_comp_plain / T_comp_dag at capacity
+    1e6, max_weight 10 (phase campaigns, pinned protocol, median of 3);
+    the DAG point is the best tile geometry by wall time, as in the DAG
+    compute-speedup figure.  In the parallel regime the ratio stays below
+    1: the DAG compute scales further (fewer, larger synchronisation
+    regions) but starts from a serial per-tile deficit, so it approaches
+    parity without crossing it; at n=50 the frontier width (<=2 tiles)
+    confines the DAG compute and the ratio collapses.
     """
+    classic = phases_c[phases_c["capacity"] == 1_000_000]
     nis = [50, 1000, 5000]
     fig, axes = plt.subplots(1, len(nis), figsize=(4.4 * len(nis), 4.4), sharey=True, squeeze=False)
     for j, ni in enumerate(nis):
-        if ni == 50:
-            dag = best_small[
-                (best_small["family"] == 10) & (best_small["capacity"] == 1_000_000)
-            ]
-            plain = kpdp[
-                (kpdp["family"] == 10) & (kpdp["capacity"] == 1_000_000)
-            ]
-        else:
-            dag = best_big[best_big["num_items"] == ni]
-            plain = plain_big[
-                (plain_big["num_items"] == ni) & (plain_big["max_weight"] == 10)
-            ]
-        procs = sorted(set(dag["processors"]) | set(plain["processors"]))
+        plain = classic[classic["n"] == ni].groupby("threads")["compute_s"].median()
+        sub_d = phases_d[phases_d["n"] == ni]
+        dag = {}
+        for t, g in sub_d.groupby("threads"):
+            wm = g.groupby(["item_block", "cap_block"])["wall_s"].median()
+            geom = wm.idxmin()
+            dag[t] = g[(g["item_block"] == geom[0]) & (g["cap_block"] == geom[1])]["compute_s"].median()
+        dag = pd.Series(dag).sort_index()
+        procs = sorted(set(plain.index) & set(dag.index))
 
         ax = axes[0][j]
-        merged = dag[["processors", "time"]].rename(columns={"time": "t_dag"}).merge(
-            plain[["processors", "time"]].rename(columns={"time": "t_plain"}),
-            on="processors",
-        )
-        ax.plot(merged["processors"], merged["t_plain"] / merged["t_dag"], "o-",
-                color="#9467bd", label=r"$T_{plain}\/T_{dag}$")
+        ax.plot(procs, (plain[procs] / dag[procs]).values, "o-",
+                color="#9467bd", label=r"$T_{plain}\/T_{dag}$ (compute)")
         ax.axhline(1.0, color="k", linestyle=":", linewidth=1)
         _style_axis_threads(ax, procs)
         ax.set_xlabel("processors (threads)")
         ax.set_title(f"num_items={ni}")
         ax.grid(True, which="both", alpha=0.3)
         ax.legend(fontsize=8)
-    axes[0][0].set_ylabel(r"DAG speedup $T_{plain}\/T_{dag}$" + "\n>1: DAG faster")
+    axes[0][0].set_ylabel(r"compute $T_{plain}\/T_{dag}$" + "\n>1: DAG faster")
     fig.tight_layout()
     fig.savefig(out, dpi=150)
     plt.close(fig)
@@ -1011,10 +1007,15 @@ def plot_decomposition(merged: pd.DataFrame, wall_col: str, title: str, out: Pat
 
 def plot_dag_block_grid(configs: pd.DataFrame, out: Path, num_items: int | None = None,
                         family: int | None = None, capacity: int | None = None,
-                        processors: int | None = None) -> None:
+                        processors: int | None = None,
+                        phases: pd.DataFrame | None = None) -> None:
     """(item_block x cap_block) heatmaps at BLOCK_GRID_POINT.
 
-    Left: median wall time (log colour).  Middle: IPC.  Right: LLC MPKI.
+    Top row: median wall time (log colour), IPC and LLC MPKI.  Bottom row:
+    phase times (first touch, compute, teardown, ms) from the phase
+    campaign at the same point, on a shared log colour scale so the three
+    phases compare by colour; geometries without phase data are masked
+    ("n.d.").
     Shows how tile size trades scheduling overhead against cache locality.
     Optional overrides select another (num_items, family, capacity,
     processors) point of the same campaign.
@@ -1032,28 +1033,58 @@ def plot_dag_block_grid(configs: pd.DataFrame, out: Path, num_items: int | None 
     ]
     cbs = sorted(sub["cap_block"].unique())
     ibs = sorted(sub["item_block"].unique(), reverse=True)
-    panels = [("time", "wall time (s)", True), ("ipc", "IPC", False), ("mpki_llc", "LLC MPKI", False)]
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.6))
-    for ax, (col, label, log) in zip(axes, panels):
-        grid = sub.pivot(index="item_block", columns="cap_block", values=col).reindex(
-            index=ibs, columns=cbs
-        )
-        norm = matplotlib.colors.LogNorm(vmin=grid.min().min(), vmax=grid.max().max()) if log else None
-        image = ax.imshow(grid.values, aspect="auto", cmap="viridis", norm=norm)
+
+    def draw(ax, grid, title, norm, row, col_i):
+        values = grid.values
+        finite = np.isfinite(values)
+        image = ax.imshow(np.ma.masked_invalid(values), aspect="auto", cmap="viridis", norm=norm)
         ax.set_xticks(range(len(cbs)))
         ax.set_xticklabels([str(c) for c in cbs])
         ax.set_yticks(range(len(ibs)))
         ax.set_yticklabels([str(i) for i in ibs])
-        for row in range(grid.shape[0]):
-            for col_i in range(grid.shape[1]):
-                value = grid.values[row, col_i]
-                ax.text(col_i, row, f"{value:.4g}" if np.isfinite(value) else "-",
-                        ha="center", va="center", fontsize=9,
-                        color="white")
-        ax.set_xlabel("cap_block")
-        ax.set_title(label)
+        ax.tick_params(labelbottom=(row == 1), labelleft=(col_i == 0))
+        for r in range(grid.shape[0]):
+            for c in range(grid.shape[1]):
+                value = values[r, c]
+                if np.isfinite(value):
+                    ax.text(c, r, f"{value:.4g}", ha="center", va="center", fontsize=9, color="white")
+                else:
+                    ax.text(c, r, "n.d.", ha="center", va="center", fontsize=9, color="0.35")
+        if col_i == 0:
+            ax.set_ylabel("item_block")
+        if row == 1:
+            ax.set_xlabel("cap_block")
+        ax.set_title(title)
         fig.colorbar(image, ax=ax, fraction=0.046)
-    axes[0].set_ylabel("item_block")
+
+    fig, axes = plt.subplots(2, 3, figsize=(15, 9))
+    panels = [("time", "wall time (s)", True), ("ipc", "IPC", False), ("mpki_llc", "LLC MPKI", False)]
+    for j, (col, label, log) in enumerate(panels):
+        grid = sub.pivot(index="item_block", columns="cap_block", values=col).reindex(
+            index=ibs, columns=cbs
+        )
+        values = grid.values
+        finite = np.isfinite(values)
+        norm = (matplotlib.colors.LogNorm(vmin=values[finite].min(), vmax=values[finite].max())
+                if log and finite.any() else None)
+        draw(axes[0, j], grid, label, norm, row=0, col_i=j)
+    # Riga delle fasi: la campagna di fasi copre solo family=10/capacity=1e6,
+    # quindi la riga si disegna solo quando il punto della figura coincide.
+    # Scala logaritmica condivisa fra i tre pannelli: con una sola geometria
+    # misurata per riga le scale per-pannello esagererebbero differenze minime.
+    if phases is not None and capacity == 1_000_000:
+        psub = phases[(phases["n"] == num_items) & (phases["threads"] == processors)]
+        phase_panels = [("first_touch_s", "first touch (ms)"), ("compute_s", "compute (ms)"),
+                        ("teardown_s", "teardown (ms)")]
+        grids = [(col, label, (psub.pivot_table(index="item_block", columns="cap_block", values=col,
+                                                aggfunc="median") * 1e3).reindex(index=ibs, columns=cbs))
+                 for col, label in phase_panels]
+        finite = np.concatenate([g.values[np.isfinite(g.values)] for _, _, g in grids])
+        norm = (matplotlib.colors.LogNorm(vmin=finite.min(), vmax=finite.max())
+                if finite.size and finite.min() > 0 else None)
+        for j, (col, label, grid) in enumerate(grids):
+            draw(axes[1, j], grid, label, norm, row=1, col_i=j)
+    fig.subplots_adjust(wspace=0.5, hspace=0.35)
     fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
@@ -1273,6 +1304,95 @@ def plot_comparison(kpdp: pd.DataFrame, best: pd.DataFrame, out: Path) -> None:
     plt.close(fig)
 
 
+def plot_big_crossover_wall(
+    kpdp: pd.DataFrame,
+    best_small: pd.DataFrame,
+    plain_big: pd.DataFrame,
+    best_big: pd.DataFrame,
+    out: Path,
+) -> None:
+    """Wall-time version of the crossover figure: T_plain/T_dag at the same
+    p, one panel per num_items, linear scale.
+
+    Same sources as the crossover table: n=50 from the small campaigns
+    (classic thread grid 1-8-32), n>=1000 from the crossover sweep with the
+    best DAG configuration per point.  The ratio crosses 1 only at 32
+    threads and only for n>=1000; the compute-only counterpart is
+    plot_big_crossover.
+    """
+    nis = [50, 1000, 5000]
+    fig, axes = plt.subplots(1, len(nis), figsize=(4.4 * len(nis), 4.4), sharey=True, squeeze=False)
+    for j, ni in enumerate(nis):
+        if ni == 50:
+            dag = best_small[
+                (best_small["family"] == 10) & (best_small["capacity"] == 1_000_000)
+            ]
+            plain = kpdp[
+                (kpdp["family"] == 10) & (kpdp["capacity"] == 1_000_000)
+            ]
+        else:
+            dag = best_big[best_big["num_items"] == ni]
+            plain = plain_big[
+                (plain_big["num_items"] == ni) & (plain_big["max_weight"] == 10)
+            ]
+        procs = sorted(set(dag["processors"]) & set(plain["processors"]))
+
+        ax = axes[0][j]
+        merged = dag[["processors", "time"]].rename(columns={"time": "t_dag"}).merge(
+            plain[["processors", "time"]].rename(columns={"time": "t_plain"}),
+            on="processors",
+        ).set_index("processors").loc[procs].reset_index()
+        ax.plot(merged["processors"], merged["t_plain"] / merged["t_dag"], "o-",
+                color="#9467bd", label=r"$T_{plain}\/T_{dag}$ (wall)")
+        ax.axhline(1.0, color="k", linestyle=":", linewidth=1)
+        _style_axis_threads(ax, procs)
+        ax.set_xlabel("processors (threads)")
+        ax.set_title(f"num_items={ni}")
+        ax.grid(True, which="both", alpha=0.3)
+        ax.legend(fontsize=8)
+    axes[0][0].set_ylabel(r"wall $T_{plain}\/T_{dag}$" + "\n>1: DAG faster")
+    fig.tight_layout()
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+
+
+def plot_big_comparison(plain_big: pd.DataFrame, best_big: pd.DataFrame, out: Path,
+                        num_items: int = 5000) -> None:
+    """Same bar layout as plot_comparison, on the crossover sweep campaign.
+
+    One row: IPC, cycles per DP cell and LLC MPKI for KnapsackDP vs the
+    best DAG configuration at num_items=5000, capacity 1e6, max_weight 10,
+    across all sweep thread counts.  Counters are whole-run (perf stat):
+    they expose the classic's per-cell cost exploding under parallelism
+    while the DAG's stays nearly flat.
+    """
+    metrics = [("ipc", "IPC"), ("cycles_per_cell", "cycles per DP cell"), ("mpki_llc", "LLC MPKI")]
+    k = plain_big[(plain_big["num_items"] == num_items) & (plain_big["max_weight"] == 10)]
+    d = best_big[best_big["num_items"] == num_items]
+    threads = sorted(set(k["processors"]) & set(d["processors"]))
+    width = 0.35
+    fig, axes = plt.subplots(1, len(metrics), figsize=(13.5, 4.2), squeeze=False)
+    for j, (col, label) in enumerate(metrics):
+        ax = axes[0][j]
+        for t_i, proc in enumerate(threads):
+            kv = k[k["processors"] == proc][col]
+            dv = d[d["processors"] == proc][col]
+            ax.bar(t_i - width / 2, kv.iloc[0] if len(kv) else np.nan, width,
+                   color="#1f77b4", label="KnapsackDP" if t_i == 0 else None)
+            ax.bar(t_i + width / 2, dv.iloc[0] if len(dv) else np.nan, width,
+                   color="#d62728", label="KnapsackDPDAG" if t_i == 0 else None)
+        ax.set_xticks(range(len(threads)))
+        ax.set_xticklabels([str(t) for t in threads])
+        ax.set_xlabel("threads")
+        ax.set_ylabel(label)
+        ax.set_title(f"num_items={num_items}")
+        ax.grid(True, axis="y", alpha=0.3)
+        ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -1293,6 +1413,8 @@ def main() -> None:
     configs, best = build_dag(perf_dag)
     configs_big, best_big = build_dag(perf_big[perf_big["test"] == "knapsackdpdag"])
     plain_big = build_big_plain(perf_big)
+    phases_dag = pd.read_csv(PHASES_DAG_FILE)
+    phases_kpdp = pd.read_csv(PHASES_KPDP_FILE)
 
     print_kpdp_tables(kpdp)
     print_dag_tables(configs, best)
@@ -1311,8 +1433,9 @@ def main() -> None:
         "perf_kpdp_kc_vs_threads.png": lambda: plot_kpdp_kc_vs_threads(kpdp, OUT_DIR / "perf_kpdp_kc_vs_threads.png"),
         "perf_kpdp_tlb_memory_wall.png": lambda: plot_kpdp_tlb_memory_wall(kpdp, OUT_DIR / "perf_kpdp_tlb_memory_wall.png"),
         "perf_kpdp_decomposition.png": lambda: plot_decomposition(kpdp, "speedup", "KnapsackDP speedup decomposition (S_wall = S_cyc * p * r)", OUT_DIR / "perf_kpdp_decomposition.png"),
-        "perf_kpdpdag_block_grid.png": lambda: plot_dag_block_grid(configs, OUT_DIR / "perf_kpdpdag_block_grid.png",
-                                                                   num_items=5000, capacity=1_000_000, processors=32),
+        "perf_kpdpdag_block_grid.png": lambda: plot_dag_block_grid(configs_big, OUT_DIR / "perf_kpdpdag_block_grid.png",
+                                                                   num_items=5000, capacity=1_000_000, processors=32,
+                                                                   phases=phases_dag),
         "perf_kpdpdag_miss_vs_tiles.png": lambda: plot_dag_miss_vs_tiles(configs, OUT_DIR / "perf_kpdpdag_miss_vs_tiles.png"),
         "perf_kpdpdag_best_config_map.png": lambda: plot_dag_best_config_map(best, OUT_DIR / "perf_kpdpdag_best_config_map.png"),
         "perf_kpdpdag_reliability.png": lambda: plot_dag_reliability(configs, best, OUT_DIR / "perf_kpdpdag_reliability.png"),
@@ -1320,7 +1443,9 @@ def main() -> None:
         "perf_kpdpdag_speedup.png": lambda: plot_dag_speedup(best, OUT_DIR / "perf_kpdpdag_speedup.png"),
         "perf_kpdpdag_decomposition.png": lambda: plot_decomposition(best, "s_wall", "KnapsackDPDAG speedup decomposition (best config, S_wall = S_cyc * p * r)", OUT_DIR / "perf_kpdpdag_decomposition.png"),
         "perf_vs_algorithms.png": lambda: plot_comparison(kpdp, best, OUT_DIR / "perf_vs_algorithms.png"),
-        "perf_big_crossover.png": lambda: plot_big_crossover(kpdp, best, plain_big, best_big, OUT_DIR / "perf_big_crossover.png"),
+        "perf_big_crossover.png": lambda: plot_big_crossover(phases_kpdp, phases_dag, OUT_DIR / "perf_big_crossover.png"),
+        "perf_big_crossover_wall.png": lambda: plot_big_crossover_wall(kpdp, best, plain_big, best_big, OUT_DIR / "perf_big_crossover_wall.png"),
+        "perf_big_comparison.png": lambda: plot_big_comparison(plain_big, best_big, OUT_DIR / "perf_big_comparison.png"),
         "perf_bandwidth.png": lambda: plot_bandwidth(kpdp, best, plain_big, best_big, OUT_DIR / "perf_bandwidth.png"),
     }
     for name, func in plots.items():
