@@ -108,19 +108,21 @@
 
 #let KpDp = algorithm-figure("Knapsack DP: Naive frontier parallel", {
   import algorithmic: *
-  Procedure("Knapsack DP", ("w:[]", "v:[]", "C: int"), {
-    Assign[$n$][$"len(w)"$]
-    Assign[$"dp"$][$"[][]"$]
-    ParallelFor($i in "(0..n)"$, {
-      IfElseChain(
-        $"weights"[i-1] <= w$,
-        {
-          Assign[$"dp[i][w]"$][$"max(dp[i-1][w],dp[i-1][w-weights[i-1]] + values[i-1])"$]
-        },
-        {
-          Assign[$"dp[i][w]"$][$"dp[i-1][w]"$]
-        },
-      )
+  Procedure("Knapsack DP", ("weights:[]", "values:[]", "C: int"), {
+    Assign[$n$][$"len(weights)"$]
+    Assign[$"dp"$][$"array"(n+1, C+1) "con tutte le celle azzerate"$]
+    For($i in "(1..n)"$, {
+      ParallelFor($w in "(0..C)"$, {
+        IfElseChain(
+          $"weights"[i-1] <= w$,
+          {
+            Assign[$"dp[i][w]"$][$"max(dp[i-1][w],dp[i-1][w-weights[i-1]] + values[i-1])"$]
+          },
+          {
+            Assign[$"dp[i][w]"$][$"dp[i-1][w]"$]
+          },
+        )
+      })
     })
   })
 })

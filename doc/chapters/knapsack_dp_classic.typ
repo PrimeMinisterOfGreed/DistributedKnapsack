@@ -38,7 +38,7 @@ L'implementazione più semplice di questo algoritmo è la seguente.
   ],
 )
 
-In questa implementazione il problema è che OpenMP apre e chiude il team di thread a ogni riga, con un overhead che si paga $n$ volte. Per mitigare l'overhead si mantiene il team aperto per tutto il ciclo sulle righe, con una barriera a fine riga. Per rendere esplicito come la matrice viene allocata, si usa la libreria Eigen3, che permette di allocare una matrice come array contiguo e di indicare l'ordine di allocazione (row-major o column-major), std::vector garantisce comunque che la memoria allocata sia contigua, ma non offre le comodità della libreria Eigen per l'accesso ai dati di vettori multidimensionali.
+In questa implementazione il problema è che OpenMP apre e chiude il team di thread a ogni riga, con un overhead che si paga $n$ volte. Per mitigare l'overhead si mantiene il team aperto per tutto il ciclo sulle righe, con una barriera a fine riga. Per rendere esplicito come la matrice viene allocata, si usa la libreria Eigen3, che permette di allocare una matrice come array contiguo e di indicare l'ordine di allocazione (row-major o column-major). Nell'esempio precedente con `std::vector<std::vector<int>>`, invece, la contiguità è garantita soltanto all'interno dei singoli vettori di riga, non fra righe diverse.
 
 #figure(
   caption: "Knapsack DP Classic frontier",
@@ -113,7 +113,7 @@ La figura mostra lo speedup della fase compute, mentre i tempi di campagna e i c
   caption: [Contatori `perf` delle run di @tab:kpdp-phases (mediana di 3, intero processo): nei run paralleli i cicli si moltiplicano con le istruzioni quasi ferme e l'IPC crolla, mentre le miss di ultimo livello restano vicine al seriale.],
 ) <tab:kpdp-perf-counters>
 
-Per attribuire la perdita alla sua causa si leggono i contatori di `perf` come rapporti fra il run parallelo e il run seriale della stessa istanza. Per prima cosa, come si può evincere dai dati in @tab:kpdp-perf-counters, il traffico di memoria utile resta uguale a quello ottenuto in seriale, per cui aggiungendo threads non cresce il lavoro reale fatto dai thread, bensì solo la loro attesa. Si va quindi a "sprecare" lavoro, l'IPC aggregato infatti crolla drasticamente, la causa non è per altro attribuibile a branch-misses ma solo a spin sulle barriere di compute. Crescono infine in modo sensibile solo le miss della TLB: tanti thread che toccano in contemporanea fette diverse della stessa riga attraversano molte più pagine distinte del seriale.
+Nei run paralleli i contatori di @tab:kpdp-perf-counters mostrano un aumento dei cicli rispetto al run seriale e un crollo dell'IPC aggregato. Poiché queste misure riguardano l'intero processo, non consentono di attribuire il degrado a una singola fase né di distinguere i contributi di compute, first touch e sincronizzazione: per analizzare la ripartizione dei tempi si fa quindi riferimento a @tab:kpdp-phases.
 
 === Script di esecuzione
 

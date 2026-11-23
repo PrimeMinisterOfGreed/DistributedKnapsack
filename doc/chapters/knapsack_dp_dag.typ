@@ -124,7 +124,7 @@ La @tab:dag-campaigns riassume la configurazione della campagna di @fig:dag-spee
   caption: [Configurazione della campagna compute: geometria migliore per punto (selezionata dalle campagne di wall), mediana su 3 repliche.],
 ) <tab:dag-campaigns>
 
-La campagna riassunta in @tab:dag-campaigns fissa la capacity e varia il numero di oggetti. A $n = 50$ nemmeno la fase di compute trae vantaggio da 32 esecutori: la frontiera , che hanno al massimo 2 tile per livello, non permettono di aumentare il parallelismo a un livello sufficiente. Il limite si allenta col numero di oggetti, dove il compute scala quasi idealmente; i wall della stessa configurazione crescono però molto meno, diluiti da first touch e teardown (@tab:dag-phases), che a taglia grande coprono da soli la maggior parte del wall.
+La campagna riassunta in @tab:dag-campaigns fissa la capacity e varia il numero di oggetti. A $n = 50$ la fase di compute non trae vantaggio da 32 esecutori, perché le frontiere strette non consentono di sfruttare il parallelismo disponibile. Per le taglie maggiori lo speedup del compute a 32 thread è circa $10.0$ a $n = 1000$ e circa $11.3$ a $n = 5000$, contro uno speedup ideale di $32$. Lo speedup dei wall è però più limitato, perché first touch e teardown (@tab:dag-phases) a taglia grande coprono la maggior parte del wall.
 
 #figure(
   table(
