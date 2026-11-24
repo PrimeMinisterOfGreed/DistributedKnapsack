@@ -38,7 +38,9 @@ L'implementazione più semplice di questo algoritmo è la seguente.
   ],
 )
 
-In questa implementazione il problema è che OpenMP apre e chiude il team di thread a ogni riga, con un overhead che si paga $n$ volte. Per mitigare l'overhead si mantiene il team aperto per tutto il ciclo sulle righe, con una barriera a fine riga. Per rendere esplicito come la matrice viene allocata, si usa la libreria Eigen3, che permette di allocare una matrice come array contiguo e di indicare l'ordine di allocazione (row-major o column-major). Nell'esempio precedente con `std::vector<std::vector<int>>`, invece, la contiguità è garantita soltanto all'interno dei singoli vettori di riga, non fra righe diverse.
+Nel primo listato ogni riga introduce una regione OpenMP parallela: l'esecuzione entra ed esce dalla regione a ogni iterazione del ciclo sugli item, con il relativo overhead di gestione e sincronizzazione. Il runtime OpenMP può riutilizzare i thread della pool, quindi questa gestione non equivale necessariamente alla creazione e distruzione fisica dei thread a ogni riga. Nella variante successiva la regione `parallel` viene mantenuta aperta all'esterno del ciclo e ogni esecutore lavora sempre sulla stessa porzione della riga. La barriera alla fine di ogni riga non serve soltanto a ridurre l'attesa, ma è necessaria perché la riga seguente possa leggere `prev[w-w_i]`, potenzialmente scritto da un altro esecutore, prima di essere calcolata.
+
+La seconda implementazione usa Eigen3, che consente di allocare una matrice come un unico array contiguo e di sceglierne l'ordine row-major o column-major. Nell'esempio precedente con `std::vector<std::vector<int>>`, invece, la contiguità è garantita soltanto all'interno dei singoli vettori di riga, non fra righe diverse.
 
 #figure(
   caption: "Knapsack DP Classic frontier",
@@ -69,7 +71,7 @@ In questa implementazione il problema è che OpenMP apre e chiude il team di thr
   ],
 )
 
-La threadpool di OpenMP viene aperta nel ciclo for più esterno, in questo modo quando si procede a calcolare le righe della DP non avviene l'apertura e chiusura dei threads, invece si indica loro solo di attendere alla fine di ogni riga mediante una barriera.
+
 
 == Knapsack DP Classic Frontier: Risultati
 
@@ -97,9 +99,19 @@ L'algoritmo è stato fatto girare su una CPU Neoverse-N1, basata su architettura
   caption: [Fasi del solver classico su 4 configurazioni (mediana di 3, maxWeight 10): nei run paralleli il wall è dominato dal first touch, il compute resta minoritario.],
 ) <tab:kpdp-phases>
 
-Lungo tutto la trattazione si divideranno i tempi in sostanzialmente 3 sezioni: fase di setup o first_touch dove sostanzialmente si costruisce e azzera la memoria; fase di compute dove si esegue il kernel e fase di teardown dove si dealloca la memoria. Questa suddivisione è necessaria per facilitare la comparazione dei tempi tra le 2 soluzioni, perchè pagano costi diversi nelle varie fasi e spesso si è interessati a comparare la sola fase di lavoro, lasciando perdere le altre due, alla fine seguirà comunque una comparazione che prenderà in esame tutte le fasi.
+Per confrontare le implementazioni si distinguono le seguenti fasi temporizzate dal solver:
 
-La figura mostra lo speedup della fase compute, mentre i tempi di campagna e i contatori della sezione seguente coprono l'intero solver, first touch della tabella incluso. Il kernel scala in modo regolare in tutte le configurazioni: la curva sale al crescere della taglia del problema, pur restando lontana dallo speedup ideale al crescere dei thread. La regressione che si osserva invece nei wall time non è dunque del calcolo: a dominare il wall in parallelo è la fase di first touch della tabella, come mostra la ripartizione di @tab:kpdp-phases. Nei run paralleli il first touch non solo smette di scalare ma arriva a costare più dell'intero run seriale: toccare la tabella con molti thread li fa collidere sul sistema di pagine, e il costo della collisione cresce con il numero di esecutori, fino ad assorbire quasi tutto il wall e lasciare il compute in una frazione marginale del tempo; alla taglia grande il first touch riesce a sfruttare una parte del parallelismo ma resta comunque la voce dominante del wall.
+- *allocazione*: acquisizione della memoria, quando registrata separatamente;
+- *first touch*: azzeramento e primo accesso alle strutture della tabella DP;
+- *graph build*: costruzione di vertici, archi e strutture dati del DAG;
+- *compute*: intervallo temporizzato del calcolo DP;
+- *backtrack*: ricostruzione degli elementi della soluzione;
+- *teardown*: deallocazione delle strutture gestite dal solver;
+- *statistiche*: raccolta delle informazioni sul DAG, quando richiesta.
+
+Nella implementazione classica, la fase di compute comprende la regione parallela che calcola le righe DP e le barriere necessarie tra una riga e la successiva. Non tutte le fasi sono presenti in ogni implementazione: la costruzione del grafo e la raccolta delle sue statistiche, per esempio, sono specifiche della versione DAG. Questa distinzione consente di confrontare separatamente il solo intervallo di calcolo e il tempo complessivo del solver.
+
+La figura mostra lo speedup della fase compute, mentre i tempi di campagna e i contatori della sezione seguente coprono l'intero solver, first touch della tabella incluso. Il kernel scala in modo regolare in tutte le configurazioni: la curva sale al crescere della taglia del problema, pur restando lontana dallo speedup ideale al crescere dei thread. La regressione che si osserva invece nei wall time non è dunque del calcolo: come mostra la ripartizione di @tab:kpdp-phases, nei run paralleli il first touch non segue la riduzione dei tempi del compute e a 32 thread diventa la componente dominante del wall. Nei confronti con la rispettiva esecuzione seriale, a 32 thread il costo del first touch arriva a superare quello dell'intero run seriale, lasciando il compute in una frazione marginale del tempo. I timer delle singole fasi documentano questa ripartizione, ma non identificano da soli il meccanismo responsabile della regressione del first touch.
 
 #figure(
   table(
@@ -117,7 +129,7 @@ Nei run paralleli i contatori di @tab:kpdp-perf-counters mostrano un aumento dei
 
 === Script di esecuzione
 
-La campagna di misure è stata eseguita sul cluster mercurio sulla partizione epito mediante il seguente script Slurm: per ogni combinazione di parametri (famiglia di peso, numero di thread, capacity) lo script esegue 3 repliche del solver sotto `perf stat`, che raccoglie i contatori hardware; il tempo del solver viene letto dallo stdout di `kpbench` della stessa esecuzione, così che contatori e tempi appartengano sempre allo stesso run, e ogni configurazione produce una riga nel CSV di riepilogo con la mediana calcolata in fase di analisi. I thread OpenMP vengono fissati uno per core con pinning (`OMP_PROC_BIND=close`, `OMP_PLACES=cores`): senza binding il sistema operativo può migrare i thread fra core durante l'esecuzione, e ogni migrazione invalida le cache del core di destinazione e rende il tempo di un kernel memory-bound dipendente da dove lo scheduler colloca i processi; con il binding ogni thread resta sul suo core, i tempi sono ripetibili fra repliche e i contatori restano attribuiti allo stesso core per tutta la misura.
+La campagna di misure è stata eseguita sul cluster mercurio sulla partizione epito mediante il seguente script Slurm: per ogni combinazione di parametri (famiglia di peso, numero di thread, capacity) lo script esegue 3 repliche del solver sotto `perf stat`, che raccoglie i contatori hardware; il tempo del solver viene letto dallo stdout di `kpbench` della stessa esecuzione, così che contatori e tempi appartengano sempre allo stesso run, e ogni configurazione produce una riga nel CSV di riepilogo con la mediana calcolata in fase di analisi. I thread OpenMP vengono distribuiti sui core con pinning compatto (`OMP_PROC_BIND=close`, `OMP_PLACES=cores`), per mantenere stabile la corrispondenza fra thread, porzioni di memoria elaborate e core e ridurre una fonte di variabilità fra repliche. Questo accorgimento limita le migrazioni dei thread, ma non esclude altre fonti di variabilità né garantisce tempi identici fra esecuzioni diverse. I contatori riportati da `perf stat` sono inoltre aggregati sull'intera esecuzione osservata: non rappresentano misure separate per singolo core.
 
 #figure(
   caption: "sbatch della campagna di misure sul DP classico",

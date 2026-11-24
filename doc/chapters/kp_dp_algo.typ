@@ -137,24 +137,55 @@
     let ib = "item_block"
     let cb = "cap_block"
     Procedure("KnapsackDPDAG", ("weights:[]", "values:[]", "capacity", "item_block", "cap_block"), {
-      Assign[$g$][#CallInline("GenerateDAG", [$ww,vv,cc,ib,cb$])]
-      Assign[$n$][#CallInline[$"len"$][$w$]]
+      Assign[$g$][#CallInline("GenerateDAG", [$ww,cc,ib,cb$])]
+      Assign[$n$][#CallInline[$"len"$][$ww$]]
       Comment[I vertici del DAG sono in ordine topologico]
-      Assign[$"levels"$][#CallInline("AssignLevels", [$"DAG"$])]
+      Assign[$"levels"$][#CallInline("AssignLevels", [$g$])]
+      Assign[$L_"max"$][$max("level[v]" "for" v in g)$]
       For($v in g$, {
-        Assign[$L$][$"level[v]"$]
-        Call[Append][$"by_level[L]"$,$v$]
+        Assign[$l$][$"level[v]"$]
+        Call[Append][$"by_level[l]"$,$v$]
       })
-      For($l in "(0..L)"$, {
+      For($l in "(0..L_max)"$, {
         ParallelFor($v in "by_level[l]"$, {
-          CallInline("ComputeTile", "v")
+          CallInline("ComputeTile", [$g, v, ww, vv, ib, cb$])
         })
       })
-      Return[$"DP[n][capacity]"$]
+      Assign[$"last"$][$g[("nb" - 1) dot "nq" + "nq" - 1]$]
+      Assign[$"opt"$][$"last.block"("last.rows" - 1, "capacity" - "last.lo")$]
+      Return[$"opt"$]
     })
   },
 )
 
+
+#let ComputeDepRanges = algorithm-figure(
+  "KnapsackDPDAG.ComputeDepRanges",
+  inset: (x: 0.2em, y: 0.42em),
+  {
+    import algorithmic: *
+    Procedure("ComputeDepRanges", ("tile", "weights:[]", "capacity", "item_block", "cap_block"), {
+      Assign[$n$][$"len(weights)"$]
+      Assign[$b$][$"tile.b"$]
+      Assign[$q$][$"tile.q"$]
+      Assign[$"lo"$][$q dot "cap_block"$]
+      Assign[$"hi"$][$min((q+1) dot "cap_block" - 1, "capacity")$]
+      Assign[$D$][$emptyset$]
+      For($i in "(b dot item_block + 1 .. min((b+1) dot item_block,n))"$, {
+        Assign[$w_i$][$"weights"[i-1]$]
+        Assign[$"d_lo"$][$max("lo" - w_i, 0)$]
+        Assign[$"d_hi"$][$min("hi" - w_i, "capacity")$]
+        If(
+          $"d_lo" <= "d_hi"$,
+          {
+            Assign[$D$][$D union {("d_lo", "d_hi")}$]
+          },
+        )
+      })
+      Return[$D$]
+    })
+  },
+)
 
 #let GenerateDAG = algorithm-figure(
   "KnapsackDPDAG.GenerateDAG",
@@ -164,24 +195,29 @@
     let AddVertex = Call.with("AddVertex")
     let AddEdge = Call.with("AddEdge")
     Procedure("GenerateDAG", ("weights:[]", "capacity", "item_block", "cap_block"), {
+      Assign[$n$][$"len(weights)"$]
       Assign[$"nb"$][$ceil(n/"item_block")$]
       Assign[$"nq"$][$ceil(("capacity"+1)/"cap_block")$]
       Assign[$g$][$"Graph{}"$]
-      Comment[Fase 1: creazione vertici]
+      Comment[Fase 1: creazione dei vertici e degli intervalli in ordine row-major]
       For($b in "(0..nb-1)"$, {
         For($q in "(0..nq-1)"$, {
           AddVertex[$(b,q)$]
+          Assign[$"dep_ranges"$][#CallInline("ComputeDepRanges", [$"tile"(b,q),"weights","capacity","item_block","cap_block"$])]
         })
       })
+      Comment[Fase 2: creazione degli archi]
       For($b in "(0..nb-1)"$, {
         For($q in "(0..nq-1)"$, {
-          Comment[La line è l'indice della linea all'interno della DP]
-          For($"line" in (b,q)$, {
-            If($exists w in "line" | exists x in "Pred"(w) in.not (b,q)$, {
-              Comment[Si aggiunge allora un arco tra il blocco corrente e quello con il predecessore]
-              AddEdge[$(m,n) | x in (m,n),(b,q)$]
-            })
-          })
+          If(
+            $b >= 1$,
+            {
+              Comment[Dipendenza del caso skip]
+              AddEdge[$(b-1,q) arrow (b,q)$]
+            },
+          )
+          Comment[Dipendenze del caso take dai tile superiori e sinistri]
+          Call[AddEdgesFromDependencyRanges][$g$, $(b,q)$, $"dep_ranges"$]
         })
       })
       Return[$g$]
@@ -195,7 +231,7 @@
   {
     import algorithmic: *
     Procedure("KnapsackDPDAG.AssignLevels", "g", {
-      Comment[i vertici vengono inseriti in ordine row-major e quindi in ordine topologico]
+      Comment[Row-major: quando si visita v, tutti i predecessori hanno livello già assegnato]
       For($v in g$, {
         IfElseChain(
           $"Pred(v)" = emptyset$,
@@ -217,24 +253,52 @@
   inset: (x: 0.2em, y: 0.42em),
   {
     import algorithmic: *
-    Procedure("KnapsackDPDAG.ComputeTile", ("dp", "tile", "weights", "values"), {
-      Assign[$"i_start,i_end"$][$"first-item","last-item"$]
-      Assign[$"w_start","w_end"$][$"first-cap","last_cap"$]
-      For($i in "(i_start,i_end)"$, {
-        Assign[w_i]["weights[i]"]
-        Assign[v_i]["values[i]"]
-        For($w in "(w_start,w_end)"$, {
-          Assign[$"skip"$][$"DP[i-1][w]"$]
-          IfElseChain(
-            $w >= w_i$,
-            {
-              Assign[$"take"$][$"DP[i-1][w-w_i]" + v_i$]
-              Assign[$"DP[i][w]"$][$max("skip", "take")$]
-            },
-            {
-              Assign[$"DP[i][w]"$][$"skip"$]
-            },
-          )
+    Procedure("KnapsackDPDAG.ComputeTile", ("g", "tile", "weights:[]", "values:[]", "item_block", "cap_block"), {
+      Assign[$"lo"$][$"tile.lo"$]
+      Assign[$"rows_local"$][$"tile.rows" - 1$]
+      Assign[$"width"$][$"tile.width"$]
+      Comment[La riga 0 del blocco è la riga di confine]
+      IfElseChain(
+        $"tile.b" = 0$,
+        {
+          For($c in "(0..width-1)"$, {
+            Assign[$"tile.block"(0,c)$][$0$]
+          })
+        },
+        {
+          For($c in "(0..width-1)"$, {
+            Assign[$"wp"$][$"lo" + c$]
+            Assign[$"qp"$][$floor("wp"/"cap_block")$]
+            Assign[$"c_prev"$][$"wp" - "qp" dot "cap_block"$]
+            Assign[$"src"$][$g[("tile.b" - 1) dot "nq" + "qp"]$]
+            Assign[$"tile.block"(0,c)$][$"src.block"("src.rows" - 1, "c_prev")$]
+          })
+        },
+      )
+      Comment[Compute degli item locali]
+      For($a in "(0..rows_local-1)"$, {
+        Assign[$i$][$"tile.b" dot "item_block" + a + 1$]
+        Assign[$w_i$][$"weights"[i-1]$]
+        Assign[$v_i$][$"values"[i-1]$]
+        Assign[$"c_fit"$][$max(min(w_i - "lo", "width"), 0)$]
+        Assign[$"c_in"$][$max(min(w_i, "width"), "c_fit")$]
+        Comment[L'item non entra nella capacità corrente]
+        For($c in "(0..c_fit-1)"$, {
+          Assign[$"tile.block"(a+1,c)$][$"tile.block"(a,c)$]
+        })
+        Comment[La sorgente del caso take appartiene a un tile a sinistra]
+        For($c in "(c_fit..c_in-1)"$, {
+          Assign[$"src_c"$][$"lo" + c - w_i$]
+          Assign[$"qp"$][$floor("src_c"/"cap_block")$]
+          Assign[$"c_prev"$][$"src_c" - "qp" dot "cap_block"$]
+          Assign[$"left"$][$g["tile.b" dot "nq" + "qp"]$]
+          Assign[$"take"$][$"left.block"(a, "c_prev") + v_i$]
+          Assign[$"tile.block"(a+1,c)$][$max("tile.block"(a,c), "take")$]
+        })
+        Comment[La sorgente del caso take è interna al tile]
+        For($c in "(c_in..width-1)"$, {
+          Assign[$"take"$][$"tile.block"(a, c - w_i) + v_i$]
+          Assign[$"tile.block"(a+1,c)$][$max("tile.block"(a,c), "take")$]
         })
       })
     })

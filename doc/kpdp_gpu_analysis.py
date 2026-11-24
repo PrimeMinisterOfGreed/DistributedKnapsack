@@ -4,8 +4,8 @@ Data source: doc/data/perf/perf_kpdpgpu.csv produced by sbatch/run_gpu.sbatch.
 For each (max_weight, capacity, threads_per_block) it holds 3 repeats with
   time_s  solver wall time from kpbench stdout (includes CUDA setup,
           allocations, transfers, backtrack),
-  dp_ms   host-measured time of the DP kernel loop only (n sequential
-          kernel launches, one per DP row).
+  dp_ms   host-measured interval of the DP loop (launches, device execution (n sequential
+          kernel launches, one per DP row) and the final synchronization; not a pure kernel time.
 
 The sweep varies threads per block t in {32,64,128,256,512,1024}; the grid
 always holds ceil((C+1)/t) blocks, i.e. one thread per DP cell: total
@@ -29,6 +29,7 @@ import pandas as pd
 BASE_DIR = Path(__file__).resolve().parent
 GPU_CSV = BASE_DIR / "data" / "perf" / "perf_kpdpgpu.csv"
 CPU_CSV = BASE_DIR / "data" / "perf" / "perf_kpdp.csv"
+CPU_PHASES_CSV = BASE_DIR / "data" / "perf" / "phases_kpdp_compute.csv"
 OUT_DIR = BASE_DIR / "images"
 
 NUM_ITEMS = 50  # every benchmark run uses num_items=50 (see sbatch scripts)
@@ -85,7 +86,7 @@ def plot_block_size(g: pd.DataFrame, out: Path) -> None:
             speedup = curve["dp_ms"].iloc[0] / curve["dp_ms"]
             ax_s.plot(THREADS_ORDER, speedup, "o-",
                       color=CAP_COLORS[cap], label=f"capacity={cap:.0e}")
-        for ax, ylab, title in ((ax_t, "kernel time dp_ms (median)", f"max_weight={family}"),
+        for ax, ylab, title in ((ax_t, "DP loop time, host measured (ms, median)", f"max_weight={family}"),
                                 (ax_s, r"speedup $S = t(32)/t(t)$", "")):
             ax.set_xscale("log", base=2)
             ax.set_xticks(THREADS_ORDER, [str(t) for t in THREADS_ORDER])
@@ -101,30 +102,40 @@ def plot_block_size(g: pd.DataFrame, out: Path) -> None:
     plt.close(fig)
 
 
-def plot_vs_cpu(g: pd.DataFrame, cpu: pd.DataFrame, out: Path) -> None:
+def plot_vs_cpu(g: pd.DataFrame, cpu: pd.DataFrame, cpu_phases: pd.DataFrame, out: Path) -> None:
     """GPU speedup over the CPU classic version at matching configurations.
 
-    cpu must come from perf_kpdp.csv (same seed/num_items, capacities 1e6/1e7).
-    Two panels: wall-to-wall speedup (GPU time_s includes CUDA setup, which
-    dominates for small tables) and kernel-only speedup (GPU dp_ms against
-    the CPU wall time, which for the CPU version is essentially all compute).
-    GPU block size is the best per configuration.
+    cpu comes from perf_kpdp.csv for the wall-to-wall panel. cpu_phases comes
+    from phases_kpdp_compute.csv for the separate DP comparison. The phase CSV
+    has no weight-family field: the report documents it as maxWeight=10, so
+    the compute comparison is explicitly restricted to that family.
+    Wall and DP comparisons select independent GPU configurations, each with
+    the minimum median of its own metric across blocks.
     """
     caps = sorted(set(g["capacity"]) & set(cpu["capacity"]))
     families = sorted(set(g["max_weight"]) & set(cpu["max_weight"]))
+    cpu_phases = cpu_phases[cpu_phases["n"] == NUM_ITEMS]
     rows = []
     for family in families:
         for cap in caps:
             gpu_sub = g[(g["max_weight"] == family) & (g["capacity"] == cap)]
-            gpu_best = gpu_sub["time_s"].min()
-            gpu_best_k = gpu_sub.loc[gpu_sub["time_s"].idxmin(), "dp_ms"]
+            gpu_wall = gpu_sub.loc[gpu_sub["time_s"].idxmin()]
+            gpu_dp = gpu_sub.loc[gpu_sub["dp_ms"].idxmin()]
             cpu_sub = cpu[(cpu["max_weight"] == family) & (cpu["capacity"] == cap)]
             for cpu_threads, label in ((1, "CPU serial"), (32, "CPU 32 threads")):
-                cpu_t = cpu_sub[cpu_sub["threads"] == cpu_threads]["time_s"].median()
-                if np.isfinite(cpu_t) and gpu_best > 0:
-                    rows.append({"max_weight": family, "capacity": cap, "baseline": label,
-                                 "wall_speedup": cpu_t / gpu_best,
-                                 "kernel_speedup": cpu_t * 1000.0 / gpu_best_k})
+                cpu_wall = cpu_sub[cpu_sub["threads"] == cpu_threads]["time_s"].median()
+                if not np.isfinite(cpu_wall) or gpu_wall["time_s"] <= 0:
+                    continue
+                row = {"max_weight": family, "capacity": cap, "baseline": label,
+                       "wall_speedup": cpu_wall / gpu_wall["time_s"]}
+                if family == 10:
+                    phase = cpu_phases[(cpu_phases["capacity"] == cap) &
+                                       (cpu_phases["threads"] == cpu_threads)]
+                    if not phase.empty and gpu_dp["dp_ms"] > 0:
+                        cpu_compute = phase["compute_s"].median()
+                        if np.isfinite(cpu_compute):
+                            row["phase_speedup"] = cpu_compute * 1000.0 / gpu_dp["dp_ms"]
+                rows.append(row)
     cmp_df = pd.DataFrame(rows)
     if cmp_df.empty:
         print("no overlapping configurations for GPU vs CPU comparison")
@@ -135,8 +146,11 @@ def plot_vs_cpu(g: pd.DataFrame, cpu: pd.DataFrame, out: Path) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(13, 4.8), sharey=True)
     markers = {"CPU serial": "o", "CPU 32 threads": "s"}
     for j, (col, title) in enumerate((("wall_speedup", "wall time (incl. CUDA setup)"),
-                                      ("kernel_speedup", "GPU kernel only vs CPU wall"))):
+                                      ("phase_speedup", "DP interval vs CPU compute (max_weight=10)"))):
         for (family, baseline), sub in cmp_df.groupby(["max_weight", "baseline"]):
+            sub = sub[np.isfinite(sub[col])]
+            if sub.empty:
+                continue
             sub = sub.sort_values("capacity")
             axes[j].plot(sub["capacity"], sub[col], markers[baseline] + "-",
                          color=FAMILY_COLORS[family],
@@ -167,7 +181,7 @@ def main() -> None:
         cpu.groupby(["max_weight", "capacity", "threads"], as_index=False)["time_s"]
         .median()
     )
-    plot_vs_cpu(g, cpu, OUT_DIR / "perf_kpdpgpu_vs_cpu.png")
+    plot_vs_cpu(g, cpu, pd.read_csv(CPU_PHASES_CSV), OUT_DIR / "perf_kpdpgpu_vs_cpu.png")
     print(f"saved {OUT_DIR / 'perf_kpdpgpu_vs_cpu.png'}")
 
 
