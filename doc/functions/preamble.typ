@@ -44,12 +44,12 @@
     counter(figure.where(kind: "algorithm")).update(0)
     it
   }
-  // Supplement in inglese per figure e tabelle (i riferimenti nel testo
-  // usano lo stesso supplement della caption).
+  // Supplement in italiano per figure, tabelle, listati e algoritmi (i
+  // riferimenti nel testo usano lo stesso supplement della caption).
   show figure.where(kind: image): set figure(supplement: [Figura])
   show figure.where(kind: table): set figure(supplement: [Tabella])
   show figure.where(kind: "listing"): set figure(supplement: [Listato])
-  show figure.where(kind: "algorithm"): set figure(supplement: [Algorithm])
+  show figure.where(kind: "algorithm"): set figure(supplement: [Algoritmo])
   // Il numero di un riferimento va risolto alla posizione della figura
   // referenziata, non a quella del riferimento: senza questa regola un
   // @fig citato in un altro capitolo mostrerebbe il capitolo sbagliato
@@ -61,9 +61,9 @@
       let loc = el.location()
       let chapter = counter(heading).at(loc).first()
       let num = counter(figure.where(kind: el.kind)).at(loc).first()
-      let supp = if el.kind == image { [Figure] } else if el.kind == table { [Table] } else if el.kind == "listing" {
+      let supp = if el.kind == image { [Figura] } else if el.kind == table { [Tabella] } else if el.kind == "listing" {
         [Listato]
-      } else if el.kind == "algorithm" { [Algorithm] } else { it.supplement }
+      } else if el.kind == "algorithm" { [Algoritmo] } else { it.supplement }
       [#supp~#numbering("1.1", chapter, num)]
     } else {
       it

@@ -7,7 +7,7 @@
 
 #let ParallelFor = iflike.with(kw1: "for", kw2: "do in parallel", kw3: "end")
 
-#let dp_algo_dag_sequential = algorithm-figure(
+#let dp_algo_dag_sequential = algorithm-figure.with(supplement: "Algoritmo")(
   "Tiled Knapsack DP",
   inset: 0.42em,
   {
@@ -106,7 +106,7 @@
   },
 );
 
-#let KpDp = algorithm-figure("Knapsack DP: Naive frontier parallel", {
+#let KpDp = algorithm-figure.with(supplement: "Algoritmo")("Knapsack DP: parallelizzazione naïve per riga", {
   import algorithmic: *
   Procedure("Knapsack DP", ("weights:[]", "values:[]", "C: int"), {
     Assign[$n$][$"len(weights)"$]
@@ -127,7 +127,7 @@
   })
 })
 
-#let KpDpDag = algorithm-figure(
+#let KpDpDag = algorithm-figure.with(supplement: "Algoritmo")(
   "KnapsackDPDAG",
   {
     import algorithmic: *
@@ -159,7 +159,7 @@
 )
 
 
-#let ComputeDepRanges = algorithm-figure(
+#let ComputeDepRanges = algorithm-figure.with(supplement: "Algoritmo")(
   "KnapsackDPDAG.ComputeDepRanges",
   inset: (x: 0.2em, y: 0.42em),
   {
@@ -187,7 +187,7 @@
   },
 )
 
-#let GenerateDAG = algorithm-figure(
+#let GenerateDAG = algorithm-figure.with(supplement: "Algoritmo")(
   "KnapsackDPDAG.GenerateDAG",
   inset: (x: 0.2em, y: 0.42em),
   {
@@ -225,7 +225,7 @@
   },
 )
 
-#let AssignLevels = algorithm-figure(
+#let AssignLevels = algorithm-figure.with(supplement: "Algoritmo")(
   "KnapsackDPDAG.AssignLevels",
   inset: (x: 0.2em, y: 0.42em),
   {
@@ -248,7 +248,7 @@
   },
 )
 
-#let ComputeTile = algorithm-figure(
+#let ComputeTile = algorithm-figure.with(supplement: "Algoritmo")(
   "KnapsackDPDAG.ComputeTile",
   inset: (x: 0.2em, y: 0.42em),
   {
