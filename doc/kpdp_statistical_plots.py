@@ -17,18 +17,9 @@ IMAGES = BASE_DIR / "images"
 BASE_SEED = 42
 
 
-def median_q1_q3(frame, group_columns, value_column):
-    grouped = frame.groupby(group_columns)[value_column]
-    # Keep replicas separate from the statistical summary used for plotting.
-    return grouped.agg(["median", lambda values: values.quantile(.25),
-                        lambda values: values.quantile(.75)]).rename(
-        columns={"median": "median", "<lambda_0>": "q25", "<lambda_1>": "q75"}
-    ).reset_index()
-
-
 def plot_gpu_repetitions() -> None:
     df = pd.read_csv(DATA / "perf_kpdpgpu_stat21.csv")
-    stats = median_q1_q3(df, ["max_weight", "capacity", "threads"], "dp_ms")
+    stats = df.groupby(["max_weight", "capacity", "threads"], as_index=False).dp_ms.median()
     counts = df.groupby(["max_weight", "capacity", "threads"]).size()
     assert (counts == 21).all()
     colors = {100000: "#1f77b4", 1000000: "#2ca02c", 10000000: "#d62728"}
@@ -43,12 +34,10 @@ def plot_gpu_repetitions() -> None:
         for cap in sorted(df.capacity.unique()):
             s = stats[(stats.max_weight == family) & (stats.capacity == cap)].sort_values("threads")
             times = s.threads.to_numpy()
-            med = s["median"].to_numpy()
+            med = s.dp_ms.to_numpy()
             label = f"capacity={cap:.0e}"
             for ax, vals in ((top, med), (bottom, med[0] / med)):
                 ax.plot(times, vals, "o-", color=colors[cap], label=label, linewidth=1.8, markersize=5)
-                if ax is top:
-                    ax.fill_between(times, s.q25, s.q75, color=colors[cap], alpha=.17)
         for ax in (top, bottom):
             ax.set_xscale("log", base=2)
             ax.set_xticks(threads, [str(t) for t in threads])
@@ -60,8 +49,7 @@ def plot_gpu_repetitions() -> None:
         top.set_ylabel("DP loop time, host measured (ms)")
         bottom.set_ylabel("ratio of block-size medians")
         bottom.set_xlabel("threads per block")
-    axes[0, 0].set_ylabel("DP loop time (ms, median and IQR)")
-    fig.suptitle("GPU, seed 42: 21 replicas/configuration; bands = interquartile range")
+    axes[0, 0].set_ylabel("DP loop time (ms, median)")
     fig.tight_layout()
     fig.savefig(IMAGES / "perf_kpdpgpu_block_size.png", dpi=150)
     plt.close(fig)
@@ -131,7 +119,6 @@ def plot_dag_seed_wall() -> None:
     ax.set_yscale("log", base=2)
     ax.set_xlabel("threads")
     ax.set_ylabel("DAG wall time (s)")
-    ax.set_title("DAG, n=5000, capacity=1e6, maxWeight=10: median and range over nine seeds")
     ax.grid(alpha=.3)
     ax.legend(fontsize=8)
     fig.tight_layout()

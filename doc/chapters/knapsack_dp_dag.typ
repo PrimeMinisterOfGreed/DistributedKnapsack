@@ -105,7 +105,7 @@ Le misure condividono l'ambiente del capitolo precedente: nodo ARM Neoverse-N1 d
 
 #figure(
   image("../images/perf_kpdpdag_speedup_vs_n.png", width: 100%),
-  caption: [Speedup della fase `compute` del solver DAG al variare di thread e numero di oggetti (capacità $10^6$, granularità del tile migliore per punto, mediana su 3 ripetizioni).],
+  caption: [Speedup di `compute` del solver DAG al variare di thread e $n$ (capacità $10^6$, geometria migliore per punto, mediana di 3 ripetizioni).],
 ) <fig:dag-speedup>
 
 La @tab:dag-campaigns riassume la configurazione della campagna di @fig:dag-speedup.
@@ -118,7 +118,7 @@ La @tab:dag-campaigns riassume la configurazione della campagna di @fig:dag-spee
     [1000], [$10^6$], [10], [(25, 10³) a 1-8 t, (10, 10⁴) a 16-32 t], [1, 4, 8, 16, 32 (3)],
     [5000], [$10^6$], [10], [(25, 10³) a 1 t, (25, 10⁴) a 4-32 t], [1, 4, 8, 16, 32 (3)],
   ),
-  caption: [Configurazione della campagna su `compute`: geometria migliore per punto (selezionata dalle campagne di wall time), mediana su 3 ripetizioni.],
+  caption: [Configurazioni della campagna di @fig:dag-speedup; geometria migliore per punto sul wall time, mediana di 3 ripetizioni.],
 ) <tab:dag-campaigns>
 
 La campagna riassunta in @tab:dag-campaigns fissa la capacità e varia il numero di oggetti. A $n=50$, `compute` non trae vantaggio da 32 esecutori perché i livelli delle geometrie selezionate contengono pochi tile. Per le taglie maggiori lo speedup di `compute` a 32 thread è circa $10.0$ a $n=1000$ e $11.3$ a $n=5000$, contro uno speedup ideale di $32$. Lo speedup del wall time è più limitato perché `first_touch` e `teardown` (@tab:dag-phases) coprono la maggior parte del tempo alle taglie grandi.
@@ -136,7 +136,7 @@ La campagna riassunta in @tab:dag-campaigns fissa la capacità e varia il numero
     [5000], [25], [$10^2$], [2000200], [10200], [1], [199.9], [196.1 \/ 200],
     [5000], [25], [$10^4$], [20200], [300], [1], [74.6], [67.3 \/ 101],
   ),
-  caption: [Selezione rappresentativa delle statistiche dei livelli del DAG (larghezza = tile per livello); i dati completi restano negli output del repository.],
+  caption: [Statistiche dei livelli per geometrie rappresentative (larghezza = tile per livello).],
 ) <tab:dag-frontiers>
 
 Le statistiche di @tab:dag-frontiers mostrano che la geometria dei tile modifica la larghezza dei livelli e quindi il parallelismo disponibile. L'inserimento row-major garantisce l'ordine topologico; nelle configurazioni analizzate, le frontiere sono disposte lungo anti-diagonali. I valori riportati sono quelli misurati per ciascuna configurazione.
@@ -152,8 +152,8 @@ Le statistiche di @tab:dag-frontiers mostrano che la geometria dei tile modifica
     [$"cap"_b$],
     [thread],
     [wall time (ms)],
-    [`graph_build` (ms)],
-    [`first_touch` (ms)],
+    [`graph_` #linebreak() `build` (ms)],
+    [`first_` #linebreak() `touch` (ms)],
     [`compute` (ms)],
     [`teardown` (ms)],
 
@@ -162,7 +162,7 @@ Le statistiche di @tab:dag-frontiers mostrano che la geometria dei tile modifica
     [1000], [10], [10], [$10^4$], [32], [464.8], [14.1], [134.4], [42.6], [273.0],
     [5000], [10], [25], [$10^4$], [32], [2050.1], [38.5], [621.9], [193.2], [1194.6],
   ),
-  caption: [Fasi del solver DAG su 4 configurazioni (mediana di 3 ripetizioni, geometria migliore per punto): a $n >= 1000$ `teardown` copre da solo oltre metà del wall time a 32 thread.],
+  caption: [Fasi del solver DAG su 4 configurazioni (mediana di 3 ripetizioni, geometria migliore per punto).],
 ) <tab:dag-phases>
 
 
@@ -182,14 +182,14 @@ Il solver registra separatamente la costruzione del DAG nella fase `graph_build`
   caption: [Confronto fra le implementazioni classica e DAG a capacità $10^6$ e $n=50$],
 ) <fig:dag-vs-classic>
 
-A $n=50$, @fig:dag-vs-classic mostra comportamenti coerenti fra le due famiglie di pesi: a 32 thread l'IPC del classico scende a circa $0.25$ e i cicli per cella crescono di oltre un ordine di grandezza rispetto al seriale; per il DAG l'IPC arriva invece a circa $2.3$ con $W_"max"=10$, con un aumento dei cicli molto più contenuto. A 32 thread le miss di ultimo livello sono circa $9$-$10$ MPKI per il classico e $2$ per il DAG. Essendo contatori dell'intero processo, questi andamenti non isolano la sola fase `compute` né ne spiegano la causa.
+La @fig:dag-vs-classic mostra che in seriale il DAG presenta un IPC leggermente inferiore e circa $3.2$–$3.6$ volte più cicli/cella del classico. A 32 thread il rapporto si ribalta: l'IPC scende a circa $0.25$–$0.27$ nel classico, mentre resta compreso fra circa $1.8$ e $2.3$ nel DAG; i cicli/cella salgono a circa $58$ nel classico, contro valori di circa $36$–$44$ nel DAG. Anche le LLC MPKI mostrano una separazione marcata a 32 thread, con valori di $8.6$–$9.6$ per il classico contro $1.7$–$1.9$ per il DAG. Le due famiglie di pesi mostrano andamenti qualitativi coerenti. Tuttavia, poiché i contatori sono aggregati sull'intero processo, queste differenze non vanno interpretate come misure del solo `compute` né come prova di uno specifico meccanismo di località o sincronizzazione.
 
 
 === La granularità dei tile
 
 #figure(
   image("../images/perf_kpdpdag_block_grid.png", width: 100%),
-  caption: [Effetto di `item_block` e `cap_block` a $n=5000$, capacità $10^6$, 32 thread. Sopra: wall time, IPC e LLC MPKI. Sotto: tempi di `first_touch`, `compute` e `teardown` (mediana di 3 ripetizioni, scala logaritmica condivisa fra i pannelli).],
+  caption: [Effetto di `item_block` e `cap_block` a $n=5000$, capacità $10^6$, 32 thread. Sopra: wall time, IPC e LLC MPKI; sotto: tempi di `first_touch`, `compute` e `teardown` (mediana di 3 ripetizioni, scala logaritmica).],
 ) <fig:dag-block-grid>
 
 La @fig:dag-block-grid mostra l'effetto della geometria dei tile sul solver a $n=5000$ e 32 thread. `compute` occupa $170$-$210$ ms, meno di un decimo del wall time, mentre `first_touch` e `teardown` assorbono la maggior parte del tempo. `teardown` resta quasi costante, fra $1.2$ e $1.4$ s. `compute` varia poco e non in modo monotono: il suo minimo si ottiene a $(25,10^3)$, mentre il wall time minimo si ottiene a $(25,10^4)$. Anche gli indicatori hardware variano poco: l'IPC resta fra $1.32$ e $1.42$ e le miss di ultimo livello fra $10.4$ e $11.9$ MPKI. Questi contatori riguardano l'intero processo e non identificano un meccanismo specifico del calcolo o della gestione della memoria.
@@ -210,7 +210,7 @@ In @fig:kpdp-perf-crossover, a $n=50$ il DAG è più rapido in `compute` solo in
 
 #figure(
   image("../images/perf_big_comparison.png", width: 100%),
-  caption: [Confronto fra le implementazioni classica e DAG (geometria migliore per punto) a $n=5000$, capacità $10^6$, `maxWeight=10`],
+  caption: [Contatori hardware delle due implementazioni a $n=5000$, capacità $10^6$, `maxWeight=10`; geometria migliore per punto.],
 ) <fig:dag-big-comparison>
 
 A $n=5000$, @fig:dag-big-comparison conferma la divergenza dei contatori: a 32 thread il classico scende da circa $1.8$ a $0.26$ IPC e supera $50$ cicli/cella, mentre il DAG resta a circa $1.36$ IPC e $9$ cicli/cella. A 16 e 32 thread il classico registra però meno LLC MPKI. Questi contatori aggregati non contraddicono il risultato temporale: il classico resta più rapido in `compute`, ma è più lento sul wall time.
@@ -219,7 +219,7 @@ A $n=5000$, @fig:dag-big-comparison conferma la divergenza dei contatori: a 32 t
 
 #figure(
   image("../images/perf_kpdpdag_seed9_wall.png", width: 85%),
-  caption: [Wall time del DAG a $n=5000$, capacità $10^6$ e $W_"max"=10$. Le curve mostrano la mediana delle mediane per seed; la banda è l'intervallo minimo–massimo fra seed su nove istanze, con cinque ripetizioni per seed.],
+  caption: [Wall time del DAG a $n=5000$, capacità $10^6$, $W_"max"=10$: mediana delle mediane per seed e banda minimo–massimo fra nove seed.],
 ) <fig:dag-seed-wall>
 
 La @fig:dag-seed-wall estende a nove seed il confronto sul wall time. Per ogni geometria e seed sono state effettuate cinque ripetizioni. Il wall time diminuisce sensibilmente fino a 8 thread in tutte le geometrie, mentre il guadagno aggiuntivo a 32 thread è più limitato e dipende dalla geometria. Il grafico riguarda soltanto il wall time del solver e non permette di separare `compute`, `first_touch` e `teardown`.

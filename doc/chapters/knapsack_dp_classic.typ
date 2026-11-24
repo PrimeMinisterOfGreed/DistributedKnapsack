@@ -13,14 +13,11 @@ L'algoritmo ha complessità $O(n C)$, dove $n$ è il numero di oggetti e $C$ la 
 
 == Implementazione
 
-L'implementazione naïve usa una matrice `std::vector<std::vector<int>>` e una direttiva `omp parallel for` per ogni riga. Aprire e chiudere la regione parallela a ogni oggetto introduce overhead di gestione e sincronizzazione, anche se il runtime OpenMP può riutilizzare i thread della pool.
-
-La variante analizzata usa Eigen3, con una matrice row-major allocata come unico array contiguo, e mantiene la regione `parallel` aperta all'esterno del ciclo. Ogni esecutore elabora sempre la stessa porzione di riga; la barriera è necessaria perché la riga successiva possa leggere celle scritte da altri esecutori @openmp52.
+La soluzione classica usa Eigen3, con una matrice row-major allocata come unico array contiguo, e mantiene la regione `parallel` aperta all'esterno del ciclo. Ogni esecutore elabora sempre la stessa porzione di riga; la barriera è necessaria perché la riga successiva possa leggere celle scritte da altri esecutori @openmp52.
 
 #figure(
   caption: "DP classico: implementazione Eigen/OpenMP",
   kind: "listing",
-  supplement: none,
   sourcecode[
     ```cpp
     // Tabella ROW-major: la riga e' uno stream contiguo
@@ -59,17 +56,17 @@ Il solver è stato eseguito su una CPU Neoverse-N1, basata su architettura ARM, 
 
 === Campionamento e aggregazione dei dati
 
-Le misure distinguono la variabilità fra ripetizioni della stessa configurazione dalla sensibilità all'istanza, variando il seed. Per la variabilità fra ripetizioni si riportano mediana e intervallo interquartile (IQR). Il wall time del solver (`time_s`) è il tempo complessivo dell'esecuzione. La @tab:misure-campionamento riassume i gruppi confrontati.
+Le misure distinguono la variabilità fra ripetizioni della stessa configurazione dalla sensibilità all'istanza, variando il seed. Nella @fig:kpdpgpu-block-size, i tempi delle 21 ripetizioni GPU del seed 42 sono riassunti dalla mediana. Il wall time del solver (`time_s`) è il tempo complessivo dell'esecuzione. La @tab:misure-campionamento riassume i gruppi confrontati.
 
 #figure(
   table(
-    columns: 5,
-    [Solver, campione], [Gruppi di analisi], [Ripetizioni per gruppo], [Esecuzioni totali], [Ruolo],
-    [GPU, seed 42], [36 configurazioni], [21], [756], [Mediana e IQR per configurazione],
-    [DP classico, seed 42], [12 configurazioni], [21], [252], [Mediana e IQR del wall time],
-    [DAG, per ogni taglia], [12 geometrie], [21], [252], [Mediana e IQR per geometria],
-    [GPU, 9 seed], [324 gruppi configurazione–seed], [5 per seed], [1620], [Mediana delle mediane per seed],
-    [DAG, 9 seed], [108 gruppi geometria–thread–seed], [5 per seed], [540], [Mediana delle mediane per seed],
+    columns: 4,
+    [Solver, campione], [Gruppi di analisi], [Ripetizioni per gruppo], [Esecuzioni totali],
+    [GPU, seed 42], [36 configurazioni], [21], [756],
+    [DP classico, seed 42], [12 configurazioni], [21], [252],
+    [DAG, per ogni taglia], [12 geometrie], [21], [252],
+    [GPU, 9 seed], [324 gruppi configurazione–seed], [5 per seed], [1620],
+    [DAG, 9 seed], [108 gruppi geometria–thread–seed], [5 per seed], [540],
   ),
   caption: [Riepilogo del campionamento usato per valutare ripetibilità e sensibilità all'istanza],
 ) <tab:misure-campionamento>
@@ -90,7 +87,7 @@ Sullo stesso seed si valuta la variabilità temporale fra esecuzioni; fra i seed
     [50], [$10^7$], [32], [82.1], [53.6], [65%], [22.2], [27%],
     [5000], [$10^6$], [32], [3003], [2785], [93%], [162], [5%],
   ),
-  caption: [Fasi del solver classico su 4 configurazioni (mediana di 3 ripetizioni, `maxWeight=10`): nei run paralleli il wall time è dominato da `first_touch`, mentre `compute` resta minoritario.],
+  caption: [Fasi del solver classico su 4 configurazioni (mediana di 3 ripetizioni, `maxWeight=10`).],
 ) <tab:kpdp-phases>
 
 Per confrontare le implementazioni si distinguono le seguenti fasi temporizzate dal solver:
@@ -116,10 +113,10 @@ La @fig:kpdp-speedup mostra lo speedup di `compute`, mentre i tempi di campagna 
     [50], [$10^7$], [32], [7.17], [2.49], [0.35], [13.6], [14.1],
     [5000], [$10^6$], [32], [282.0], [74.5], [0.26], [4.9], [56.4],
   ),
-  caption: [Contatori `perf` delle run di @tab:kpdp-phases (mediana di 3 ripetizioni, intero processo): nei run paralleli i cicli si moltiplicano con le istruzioni quasi ferme e l'IPC crolla, mentre le miss di ultimo livello restano vicine al seriale.],
+  caption: [Contatori `perf` delle run di @tab:kpdp-phases, aggregati sull'intero processo (mediana di 3 ripetizioni).],
 ) <tab:kpdp-perf-counters>
 
-Nei run paralleli i contatori di @tab:kpdp-perf-counters mostrano un aumento dei cicli rispetto al run seriale e un crollo dell'IPC aggregato. Poiché queste misure riguardano l'intero processo, non consentono di attribuire il degrado a una singola fase né di distinguere i contributi di `compute`, `first_touch` e sincronizzazione: per analizzare la ripartizione dei tempi si fa quindi riferimento a @tab:kpdp-phases.
+A $n=50$ e $C=10^6$, il passaggio da 1 a 32 thread aumenta i cicli di circa 27 volte, contro un incremento delle istruzioni di circa 4,2 volte; l'IPC scende da 1,60 a 0,25 e i cicli/cella aumentano di circa 26,5 volte. A parità di thread e capacità, passando da $n=50$ a $n=5000$, le istruzioni aumentano invece di circa 99 volte, mentre i cicli/cella restano quasi invariati, 58,4 contro 56,4. Le LLC MPKI diminuiscono sia fra esecuzione seriale e parallela sia al crescere di $n$ nelle configurazioni riportate, quindi non si osserva un aumento delle miss per istruzione che possa spiegare da solo l'andamento. Essendo contatori aggregati sull'intero processo, questi risultati non identificano il contributo delle singole fasi o dei meccanismi di sincronizzazione. Per la ripartizione temporale fra le fasi si fa invece riferimento a @tab:kpdp-phases.
 
 === Acquisizione dei tempi e dei contatori
 

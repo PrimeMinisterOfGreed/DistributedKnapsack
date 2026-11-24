@@ -106,7 +106,7 @@
   },
 );
 
-#let KpDp = algorithm-figure.with(supplement: "Algoritmo")("Knapsack DP: parallelizzazione naïve per riga", {
+#let KpDp = algorithm-figure.with(supplement: "Algoritmo")("Knapsack DP: parallelizzazione per riga", {
   import algorithmic: *
   Procedure("Knapsack DP", ("weights:[]", "values:[]", "C: int"), {
     Assign[$n$][$"len(weights)"$]

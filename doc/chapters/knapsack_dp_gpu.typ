@@ -71,18 +71,18 @@ Gli `sbatch` del repository eseguono le misure su una NVIDIA A100-PCIE-40GB, var
 
 #figure(
   image("../images/perf_kpdpgpu_block_size.png", width: 100%),
-  caption: [Intervallo `dp_ms` per famiglia di pesi e capacità, con mediana e IQR su 21 ripetizioni. Sopra: tempi del ciclo DP GPU; sotto: rapporto fra il tempo mediano a 32 thread per blocco e quello agli altri block size.],
+  caption: [Intervallo `dp_ms` per famiglia di pesi e capacità (mediana su 21 ripetizioni). Sopra: tempi del ciclo DP GPU; sotto: rapporto rispetto a 32 thread per blocco.],
 ) <fig:kpdpgpu-block-size>
 
 Nella campagna i valori mediani del wall time sono centinaia di millisecondi, mentre `dp_ms` è generalmente di pochi millisecondi e arriva a qualche decina di millisecondi nelle configurazioni più lente a capacità $10^7$. Il wall time è quindi prevalentemente costituto da operazioni esterne al ciclo DP GPU, tra cui inizializzazione CUDA, allocazioni, trasferimenti, ricostruzione della soluzione e deallocazioni. Queste attività non sono cronometrate separatamente, quindi non è possibile assegnare a ciascuna una quota del costo totale. `dp_ms` consente di confrontare le geometrie di lancio sul solo ciclo DP GPU, ma non rappresenta il wall time del solver.
 
-Alle capacità $10^5$ e $10^6$, `dp_ms` mostra variazioni meno ampie in valore assoluto rispetto alla capacità $10^7$, senza essere perfettamente costante al variare del blocco. A capacità $10^7$ il tempo scende fortemente passando da 32 a 256 thread per blocco. Le differenze fra le configurazioni oltre 256 thread sono invece molto più contenute rispetto a quelle osservate fra 32 e 256 thread, e il minimo puntuale dipende dalla ripetizione e dal seed. Le bande di @fig:kpdpgpu-block-size rappresentano lo IQR delle 21 esecuzioni per configurazione. Queste misure non identificano la causa degli andamenti, perché non separano overhead dei lanci, occupazione e scheduling. Inoltre, nel modello di esecuzione CUDA non esistono barriere implicite fra warp di blocchi diversi all'interno dello stesso kernel, che non possono quindi spiegare l'andamento osservato.
+Alle capacità $10^5$ e $10^6$, `dp_ms` mostra variazioni meno ampie in valore assoluto rispetto alla capacità $10^7$, senza essere perfettamente costante al variare del blocco. A capacità $10^7$ il tempo scende fortemente passando da 32 a 256 thread per blocco. Le differenze fra le configurazioni oltre 256 thread sono invece molto più contenute rispetto a quelle osservate fra 32 e 256 thread, e il minimo puntuale dipende dalla ripetizione e dal seed. Queste misure non identificano la causa degli andamenti, perché non separano overhead dei lanci, occupazione e scheduling. Inoltre, nel modello di esecuzione CUDA non esistono barriere implicite fra warp di blocchi diversi all'interno dello stesso kernel, che non possono quindi spiegare l'andamento osservato.
 
 === Robustezza rispetto al seed
 
 #figure(
   image("../images/perf_kpdpgpu_seed9.png", width: 100%),
-  caption: [Tempo del ciclo DP GPU `dp_ms` a capacità $10^7$. Per ciascun punto di blocco sono mostrate le mediane delle cinque ripetizioni associate a nove seed; la linea rappresenta la mediana delle mediane per seed. Il seed 42 è evidenziato in arancione.],
+  caption: [Intervallo `dp_ms` a capacità $10^7$ per nove seed: punti = mediane di 5 ripetizioni; linea = mediana delle mediane; seed 42 in arancione.],
 ) <fig:kpdpgpu-seed9>
 
 La campagna a seed variabile consente di distinguere la ripetibilità sullo stesso seed dalla sensibilità all'istanza. In entrambe le famiglie di pesi, i confronti 32–256 thread conservano una differenza ampia e dello stesso segno in tutti i seed: cambiare la geometria modifica fortemente la durata di `dp_ms`. Al contrario, 256 e 1024 thread mostrano tempi vicini e le differenze per seed cambiano di segno in vari casi, quindi non si dimostra un peggioramento sistematico oltre 256 thread. I grafici @fig:kpdpgpu-block-size e @fig:kpdpgpu-seed9 riportano esclusivamente la durata del ciclo DP GPU misurata sull'host, non una stima dei tempi dei singoli kernel CUDA né un effetto diretto sul wall time del solver.

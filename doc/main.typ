@@ -19,19 +19,7 @@ Il documento presenta tre implementazioni parallele dell'algoritmo dello zaino b
 
 = Conclusioni
 
-La campagna estesa consente di distinguere quali conclusioni sono supportate dalla multiplicità delle esecuzioni e della variazione del seed. La @tab:evidence-bounds riassume l'ambito delle principali evidenze, indicando anche come queste non devono essere interpretate oltre le configurazioni misurate.
-
-#figure(
-  table(
-    columns: 3,
-    [Aspetto], [Evidenza], [Confine della conclusione],
-    [GPU, 32 → 256 thread], [Il tempo del ciclo DP scende fortemente a capacità $10^7$, in entrambe le famiglie di pesi e in tutti i seed misurati.], [Il risultato non dimostra quali meccanismi determinino questo beneficio, come occupancy, DRAM o scheduling.],
-    [GPU, 256 → 1024 thread], [I tempi restano vicini e le differenze per seed cambiano segno in vari casi.], [Non è dimostrata una regressione uniforme oltre 256 thread né un optimum universale del block size.],
-    [DAG, 8 → 32 thread], [Il vantaggio addizionale è limitato e varia con la geometria, circa $1.09$–$1.21$ volte per seed in alcuni casi a $n=5000$.], [Il wall time non coincide con lo scaling ideale e non attribuisce l'effetto a un unico meccanismo.],
-    [`compute` e wall time], [Un solver con una fase `compute` più lenta può avere un wall time inferiore.], [Ogni confronto deve precisare quale fase considera: `compute`, `first_touch`, `graph_build`, `teardown` o wall time.],
-  ),
-  caption: [Evidenze robuste e corrispettivo confine inferenziale],
-) <tab:evidence-bounds>
+La campagna estesa consente di distinguere quali conclusioni sono supportate dalla multiplicità delle esecuzioni e della variazione del seed. Le misure supportano quattro conclusioni circoscritte. A capacità $10^7$, il passaggio da 32 a 256 thread per blocco riduce marcatamente `dp_ms` in entrambe le famiglie di pesi e in tutti i seed misurati. Oltre 256 thread le differenze sono più contenute e cambiano segno in vari casi: non dimostrano né una regressione uniforme né un optimum universale del block size, né identificano i meccanismi responsabili degli andamenti. Nel DAG, il vantaggio addizionale fra 8 e 32 thread è limitato e dipende dalla geometria, con rapporti di circa $1.09$–$1.21$ in alcuni casi a $n=5000$; non equivale a uno scaling ideale e non identifica un unico meccanismo. Infine, un solver con una fase `compute` più lenta può avere un wall time inferiore: ogni confronto deve quindi precisare la fase considerata, fra `compute`, `first_touch`, `graph_build`, `teardown` e wall time.
 
 == Validità e riproducibilità
 
