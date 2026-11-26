@@ -254,27 +254,14 @@
   {
     import algorithmic: *
     Procedure("KnapsackDPDAG.ComputeTile", ("g", "tile", "weights:[]", "values:[]", "item_block", "cap_block"), {
+      Assign[$n$][$"len(weights)"$]
+      Assign[$"nb"$][$ceil(n\/"item_block")$]
+      Comment[$|V(g)| = "nb" dot "nq"$ recupera il numero di colonne della griglia]
+      Assign[$"nq"$][$"|V(g)|" \/ "nb"$]
       Assign[$"lo"$][$"tile.lo"$]
       Assign[$"rows_local"$][$"tile.rows" - 1$]
-      Assign[$"width"$][$"tile.width"$]
       Comment[La riga 0 del blocco è la riga di confine]
-      IfElseChain(
-        $"tile.b" = 0$,
-        {
-          For($c in "(0..width-1)"$, {
-            Assign[$"tile.block"(0,c)$][$0$]
-          })
-        },
-        {
-          For($c in "(0..width-1)"$, {
-            Assign[$"wp"$][$"lo" + c$]
-            Assign[$"qp"$][$floor("wp"/"cap_block")$]
-            Assign[$"c_prev"$][$"wp" - "qp" dot "cap_block"$]
-            Assign[$"src"$][$g[("tile.b" - 1) dot "nq" + "qp"]$]
-            Assign[$"tile.block"(0,c)$][$"src.block"("src.rows" - 1, "c_prev")$]
-          })
-        },
-      )
+      Call[CopyBoundaryRow][$g$, $"tile"$, $"cap_block"$, $"nq"$]
       Comment[Compute degli item locali]
       For($a in "(0..rows_local-1)"$, {
         Assign[$i$][$"tile.b" dot "item_block" + a + 1$]
@@ -282,24 +269,61 @@
         Assign[$v_i$][$"values"[i-1]$]
         Assign[$"c_fit"$][$max(min(w_i - "lo", "width"), 0)$]
         Assign[$"c_in"$][$max(min(w_i, "width"), "c_fit")$]
-        Comment[L'item non entra nella capacità corrente]
-        For($c in "(0..c_fit-1)"$, {
-          Assign[$"tile.block"(a+1,c)$][$"tile.block"(a,c)$]
-        })
-        Comment[La sorgente del caso take appartiene a un tile a sinistra]
-        For($c in "(c_fit..c_in-1)"$, {
-          Assign[$"src_c"$][$"lo" + c - w_i$]
-          Assign[$"qp"$][$floor("src_c"/"cap_block")$]
-          Assign[$"c_prev"$][$"src_c" - "qp" dot "cap_block"$]
-          Assign[$"left"$][$g["tile.b" dot "nq" + "qp"]$]
-          Assign[$"take"$][$"left.block"(a, "c_prev") + v_i$]
-          Assign[$"tile.block"(a+1,c)$][$max("tile.block"(a,c), "take")$]
-        })
-        Comment[La sorgente del caso take è interna al tile]
-        For($c in "(c_in..width-1)"$, {
-          Assign[$"take"$][$"tile.block"(a, c - w_i) + v_i$]
-          Assign[$"tile.block"(a+1,c)$][$max("tile.block"(a,c), "take")$]
-        })
+        Call[CopySkipPrefix][$"tile"$, $a$, $"c_fit"$]
+        Call[ComputeTakeFromLeft][$g$, $"tile"$, $a$, $"c_fit"$, $"c_in"$, $w_i$, $v_i$, $"cap_block"$, $"nq"$]
+        Call[ComputeTakeInside][$"tile"$, $a$, $"c_in"$, $w_i$, $v_i$]
+      })
+    })
+  },
+)
+
+#let ComputeTileSubroutines = algorithm-figure.with(supplement: "Algoritmo")(
+  "KnapsackDPDAG.ComputeTile: routine ausiliarie",
+  inset: (x: 0.2em, y: 0.42em),
+  {
+    import algorithmic: *
+    Procedure("CopyBoundaryRow", ("g", "tile", "cap_block", "nq"), {
+      Comment[Inizializza la riga 0 a zero oppure la copia dall'ultima riga del tile superiore]
+      IfElseChain(
+        $"tile.b" = 0$,
+        {
+          For($c in "(0..tile.width-1)"$, {
+            Assign[$"tile.block"(0,c)$][$0$]
+          })
+        },
+        {
+          For($c in "(0..tile.width-1)"$, {
+            Assign[$"wp"$][$"tile.lo" + c$]
+            Assign[$"qp"$][$floor("wp"/"cap_block")$]
+            Assign[$"c_prev"$][$"wp" - "qp" dot "cap_block"$]
+            Assign[$"src"$][$g[("tile.b" - 1) dot "nq" + "qp"]$]
+            Assign[$"tile.block"(0,c)$][$"src.block"("src.rows" - 1, "c_prev")$]
+          })
+        },
+      )
+    })
+    Procedure("CopySkipPrefix", ("tile", "a", "c_fit"), {
+      Comment[Copia la riga precedente nelle colonne in cui l'item non entra nella capacità]
+      For($c in "(0..c_fit-1)"$, {
+        Assign[$"tile.block"(a+1,c)$][$"tile.block"(a,c)$]
+      })
+    })
+    Procedure("ComputeTakeFromLeft", ("g", "tile", "a", "c_fit", "c_in", "w_i", "v_i", "cap_block", "nq"), {
+      Comment[Applica il caso take leggendo la sorgente da un tile a sinistra della stessa riga]
+      For($c in "(c_fit..c_in-1)"$, {
+        Assign[$"src_c"$][$"tile.lo" + c - w_i$]
+        Assign[$"qp"$][$floor("src_c"/"cap_block")$]
+        Assign[$"c_prev"$][$"src_c" - "qp" dot "cap_block"$]
+        Assign[$"left"$][$g["tile.b" dot "nq" + "qp"]$]
+        Assign[$"take"$][$"left.block"(a, "c_prev") + v_i$]
+        Assign[$"tile.block"(a+1,c)$][$max("tile.block"(a,c), "take")$]
+      })
+    })
+    Procedure("ComputeTakeInside", ("tile", "a", "c_in", "w_i", "v_i"), {
+      Comment[Applica il caso take con sorgente interna al tile corrente]
+      For($c in "(c_in..tile.width-1)"$, {
+        Assign[$"take"$][$"tile.block"(a, c - w_i) + v_i$]
+        Assign[$"tile.block"(a+1,c)$][$max("tile.block"(a,c), "take")$]
       })
     })
   },

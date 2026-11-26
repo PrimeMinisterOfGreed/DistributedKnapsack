@@ -8,7 +8,8 @@ Un modello alternativo rappresenta la DP con un DAG. Dalla ricorrenza $"Dp"_i(w)
 
 Per aumentare la granularità si raggruppano righe e capacità in tile. Dati due tile distinti $A$ e $B$, si aggiunge $A arrow B$ se $"Pred"(B) inter A eq.not emptyset$, con $"Pred"(B)=union_(x in B) "Pred"(x)$. Il livello è una proprietà statica del vertice: $L(v)=0$ se non ha predecessori e $L(v)=1+max_(p in "Pred"(v))L(p)$ altrimenti. Nell'implementazione, i tile dello stesso livello formano una frontiera di esecuzione e possono essere calcolati in parallelo.
 
-La rappresentazione delle dipendenze dello 0/1 Knapsack mediante DAG è discussa anche nel framework DPX10, che opera inizialmente a granularità di cella e prevede il decremento dinamico dei gradi di ingresso; l'implementazione qui presentata adotta invece tile bidimensionali e una schedulazione OpenMP basata su livelli statici @dpx10.
+La rappresentazione delle dipendenze dello 0/1 Knapsack mediante DAG è discussa anche nel framework DPX10, che opera a granularità di cella schedulando dinamicamente le celle durante l'esecuzione; l'implementazione qui presentata adotta invece tile bidimensionali e una schedulazione OpenMP basata su livelli statici @dpx10.
+
 
 #KpDpDag
 
@@ -17,7 +18,7 @@ L'algoritmo costruisce il grafo, assegna i livelli ed esegue in sequenza le fron
 
 #GenerateDAG
 
-Per il caso *skip* si legge $"DP"[i-1][w]$; il caso *take* legge $"DP"[i-1][w-w_i]$ quando l'indice è valido. Per un tile sull'intervallo $[c,c+g)$, le capacità lette dal caso *take* sono quindi $[c-w_i,c+g-w_i)$, troncate a $[0,C]$; gli intervalli vuoti non generano archi. `AddEdgesFromDependencyRanges` collega ogni tile predecessore che interseca questi intervalli, oltre al tile superiore del caso *skip*. Poiché i predecessori si trovano sopra oppure a sinistra, hanno descrittore row-major inferiore: non serve un ordinamento topologico esplicito.
+Per il caso skip si legge $"DP"[i-1][w]$; il caso take legge $"DP"[i-1][w-w_i]$ quando l'indice è valido. Per un tile sull'intervallo $[c,c+g)$, le capacità lette dal caso take sono quindi $[c-w_i,c+g-w_i)$, troncate a $[0,C]$; gli intervalli vuoti non generano archi. `AddEdgesFromDependencyRanges` collega ogni tile predecessore che interseca questi intervalli, oltre al tile superiore del caso skip. Poiché i predecessori si trovano sopra oppure a sinistra, hanno descrittore row-major inferiore: non serve un ordinamento topologico esplicito.
 
 #AssignLevels
 
@@ -25,7 +26,9 @@ L'assegnamento dei livelli applica la ricorrenza definita sopra, sfruttando il f
 
 #ComputeTile
 
-I tile $(b,q)$ e le capacità $w=0 dots C$ usano indici da zero, gli oggetti $i=1 dots n$ da uno. La riga 0 di ciascun tile contiene il confine ereditato dal tile superiore; le righe successive applicano la DP agli item locali.
+#ComputeTileSubroutines
+
+I tile $(b,q)$ e le capacità $w=0 dots C$ usano indici da zero, gli oggetti $i=1 dots n$ da uno. La riga 0 di ciascun tile contiene il confine ereditato dal tile superiore; le righe successive applicano la DP agli oggetti locali. La routine principale coordina quattro procedure ausiliarie: `CopyBoundaryRow` inizializza la riga di confine, `CopySkipPrefix` copia le colonne in cui l'oggetto non entra, mentre `ComputeTakeFromLeft` e `ComputeTakeInside` risolvono il caso take con sorgente rispettivamente in un tile a sinistra o interna al tile.
 
 == Implementazione
 
@@ -89,7 +92,7 @@ Nell'implementazione, `compute_levels` esegue un solo passaggio sui vertici e `s
 
 La barriera implicita a fine `parallel for` completa il livello $L$ prima dell'avvio del livello $L+1$: ogni tile trova quindi completati tutti i predecessori appartenenti ai livelli precedenti. Il valore ottimo si legge infine nell'angolo in basso a destra dell'ultimo tile, `block(rows - 1, capacity - lo)`.
 
-Il calcolo di un singolo tile (`compute_tile`) è la ricorrenza classica confinata al sottoblocco. La riga 0 viene copiata dal tile sopra: per ogni capacità $w$ dell'intervallo si risale al tile proprietario ($q' = w\/"cap"_b$, colonna $w - q' dot "cap"_b$) e se ne legge l'ultima riga, oppure si scrivono zeri se $b = 0$. Le righe interne dividono la riga in tre intervalli contigui: prima che l'item entri ($"lo" + c < w_i$, copia della riga sopra), poi il caso "take" con sorgente $w - w_i$ in un tile a sinistra della stessa riga, infine il caso "take" con sorgente interna al tile, che usa lo stesso ciclo di calcolo branch-free a puntatori delle altre varianti: i due estremi degli intervalli ($"lo" + c = w_i$ e $w - w_i = "lo"$) si calcolano una volta per riga, fuori dal ciclo caldo.
+Il calcolo di un singolo tile (`compute_tile`) è la ricorrenza classica confinata al sottoblocco. La riga 0 viene copiata dal tile sopra: per ogni capacità $w$ dell'intervallo si risale al tile proprietario ($q' = w\/"cap"_b$, colonna $w - q' dot "cap"_b$) e se ne legge l'ultima riga, oppure si scrivono zeri se $b = 0$. Le righe interne dividono la riga in tre intervalli contigui: prima che l'item entri ($"lo" + c < w_i$, copia della riga sopra), poi il caso "take" con sorgente $w - w_i$ in un tile a sinistra della stessa riga, infine il caso "take" con sorgente interna al tile, che usa lo stesso ciclo di calcolo a puntatori delle altre varianti: i due estremi degli intervalli ($"lo" + c = w_i$ e $w - w_i = "lo"$) si calcolano una volta per riga.
 
 La funzione di alto livello `knapsackdpdag` incolla le fasi: costruzione del grafo, risoluzione, ricostruzione della soluzione e al termine registra in `DAGStats` il numero di tile ($n_b dot n_q$), di archi e di livelli, insieme alla larghezza dei livelli (tile per livello, riassunta con media, mediana, minimo e massimo): sono le statistiche riportate in @tab:dag-frontiers nella sezione dei risultati.
 
@@ -140,6 +143,12 @@ La campagna riassunta in @tab:dag-campaigns fissa la capacità e varia il numero
 ) <tab:dag-frontiers>
 
 Le statistiche di @tab:dag-frontiers mostrano che la geometria dei tile modifica la larghezza dei livelli e quindi il parallelismo disponibile. L'inserimento row-major garantisce l'ordine topologico; nelle configurazioni analizzate, le frontiere sono disposte lungo anti-diagonali. I valori riportati sono quelli misurati per ciascuna configurazione.
+
+Per interpretare il parallelismo disponibile si possono definire work e span. Sia $G=(V,E)$ il DAG e $c(v)$ il costo del tile $v$: il work è il costo complessivo, mentre lo span è il costo del cammino critico:
+
+$ W = sum_(v in V) c(v), quad S = max_(P "cammino in" G) sum_(v in P) c(v). $
+
+Ipotizzando che tutti i tile abbiano lo stesso costo, allora $W/S_"levels" = abs(V)/L$, dove $L$ è il numero di livelli: il parallelismo medio coinciderebbe quindi con la larghezza media riportata in tabella. Per esempio, a $n=5000$, con `item_block=25` e `cap_block=10^4`, si ottiene $20200/300 approx 67.3$. Tuttavia questa è un approssimazione, un modello più preciso richiederebbe una stima più accurata del costo di ogni span.
 
 
 

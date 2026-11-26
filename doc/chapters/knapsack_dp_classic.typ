@@ -62,11 +62,11 @@ Le misure distinguono la variabilità fra ripetizioni della stessa configurazion
   table(
     columns: 4,
     [Solver, campione], [Gruppi di analisi], [Ripetizioni per gruppo], [Esecuzioni totali],
-    [GPU, seed 42], [36 configurazioni], [21], [756],
-    [DP classico, seed 42], [12 configurazioni], [21], [252],
-    [DAG, per ogni taglia], [12 geometrie], [21], [252],
-    [GPU, 9 seed], [324 gruppi configurazione–seed], [5 per seed], [1620],
-    [DAG, 9 seed], [108 gruppi geometria–thread–seed], [5 per seed], [540],
+    [GPU], [36 configurazioni, 1 seed], [21], [756],
+    [DP classico], [12 configurazioni, 1 seed], [21], [252],
+    [DAG], [12 geometrie, 1 seed], [21], [252],
+    [GPU], [324 gruppi configurazione–seed, 9 seed], [5 per seed], [1620],
+    [DAG], [108 gruppi geometria–thread–seed, 9 seed], [5 per seed], [540],
   ),
   caption: [Riepilogo del campionamento usato per valutare ripetibilità e sensibilità all'istanza],
 ) <tab:misure-campionamento>
@@ -96,9 +96,7 @@ Per confrontare le implementazioni si distinguono le seguenti fasi temporizzate 
 - *first touch* (`first_touch`): azzeramento e primo accesso alle strutture della tabella DP;
 - *costruzione del grafo* (`graph_build`): creazione di vertici, archi e strutture dati del DAG;
 - *calcolo DP* (`compute`): intervallo temporizzato della fase di calcolo;
-- *ricostruzione della soluzione* (`backtrack`): individuazione degli oggetti selezionati;
 - *deallocazione* (`teardown`): rilascio delle strutture gestite dal solver;
-- *statistiche*: raccolta delle informazioni sul DAG, quando richiesta.
 
 Nell'implementazione classica, `compute` comprende la regione parallela che calcola le righe DP e le barriere necessarie fra una riga e la successiva. Non tutte le fasi sono presenti in ogni implementazione: `graph_build` e la raccolta delle statistiche sono specifiche del solver DAG. Questa distinzione consente di confrontare separatamente la fase di calcolo e il wall time del solver.
 

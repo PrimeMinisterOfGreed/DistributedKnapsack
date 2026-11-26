@@ -91,7 +91,6 @@ def plot_gpu_seeds() -> None:
         ax.set_title(f"max_weight={family}, capacity=1e7")
         ax.grid(axis="y", alpha=.3)
         ax.legend(fontsize=8, ncol=3, loc="upper left")
-    fig.suptitle("GPU: nine seeds, five replicas/seed. Circles = per-seed median; line = median across seeds")
     fig.tight_layout()
     fig.savefig(IMAGES / "perf_kpdpgpu_seed9.png", dpi=150)
     plt.close(fig)
